@@ -1,0 +1,957 @@
+openapi: 3.0.3
+info:
+  title: SaaS 电商开放中台 API
+  description: |
+    多商户 SaaS 电商开放中台对外 API 规范。
+    - 统一前缀 `/api/v1`
+    - 鉴权：`app_key` + `app_secret` 换取 `AccessToken`（Bearer）
+    - 与后台 Session Token 完全隔离
+  version: 1.0.0
+  contact:
+    name: SaaS E-commerce Platform
+    email: admin@saas.com
+
+servers:
+  - url: https://api.example.com/api/v1
+    description: Production
+  - url: http://localhost:8000/api/v1
+    description: Local Development
+
+tags:
+  - name: Auth
+    description: 第三方 API 密钥鉴权
+  - name: Products
+    description: 商品管理
+  - name: Orders
+    description: 订单管理
+  - name: Bills
+    description: 月度账单
+  - name: Dashboard
+    description: 经营数据（只读）
+  - name: Webhooks
+    description: 事件回调（预留）
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ──────────────────── Auth ────────────────────
+  /auth/token:
+    post:
+      tags: [Auth]
+      summary: 获取 AccessToken
+      description: 使用 app_key + app_secret 换取 AccessToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/token/refresh:
+    post:
+      tags: [Auth]
+      summary: 刷新 AccessToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/token:
+    delete:
+      tags: [Auth]
+      summary: 吊销 AccessToken
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ──────────────────── Products ────────────────────
+  /products:
+    get:
+      tags: [Products]
+      summary: 商品列表
+      description: 需要 `product_query` 权限
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [listed, unlisted]
+        - name: keyword
+          in: query
+          schema:
+            type: string
+          description: 搜索商品名称 / ID
+        - name: price_min
+          in: query
+          schema:
+            type: number
+        - name: price_max
+          in: query
+          schema:
+            type: number
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Product'
+                      meta:
+                        $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+    post:
+      tags: [Products]
+      summary: 创建商品
+      description: 需要 `order_manage` 权限
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreate'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /products/{id}:
+    get:
+      tags: [Products]
+      summary: 商品详情
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Products]
+      summary: 更新商品
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdate'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /products/{id}/status:
+    patch:
+      tags: [Products]
+      summary: 上下架商品
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [listed, unlisted]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ──────────────────── Orders ────────────────────
+  /orders:
+    get:
+      tags: [Orders]
+      summary: 订单列表
+      description: 需要 `order_manage` 权限
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending_payment, paid, shipped, completed, refund_requested, cancelled]
+        - name: order_no
+          in: query
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Order'
+                      meta:
+                        $ref: '#/components/schemas/PaginationMeta'
+
+    post:
+      tags: [Orders]
+      summary: 创建订单
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreate'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Order'
+
+  /orders/{orderNo}:
+    get:
+      tags: [Orders]
+      summary: 订单详情
+      parameters:
+        - $ref: '#/components/parameters/OrderNo'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/OrderDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /orders/{orderNo}/ship:
+    post:
+      tags: [Orders]
+      summary: 发货
+      parameters:
+        - $ref: '#/components/parameters/OrderNo'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tracking_no:
+                  type: string
+                  description: 物流单号
+                carrier:
+                  type: string
+                  description: 承运商
+      responses:
+        '200':
+          description: 发货成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '409':
+          description: 状态不允许发货
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders/{orderNo}/cancel:
+    post:
+      tags: [Orders]
+      summary: 取消订单
+      parameters:
+        - $ref: '#/components/parameters/OrderNo'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: 取消成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /orders/{orderNo}/refund:
+    post:
+      tags: [Orders]
+      summary: 申请退款
+      parameters:
+        - $ref: '#/components/parameters/OrderNo'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                amount:
+                  type: number
+                  description: 退款金额，默认全额
+      responses:
+        '200':
+          description: 退款申请已提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  # ──────────────────── Bills ────────────────────
+  /bills:
+    get:
+      tags: [Bills]
+      summary: 月度账单列表
+      description: 需要 `bill_query` 权限
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: year
+          in: query
+          schema:
+            type: integer
+            example: 2026
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TenantBill'
+                      meta:
+                        $ref: '#/components/schemas/PaginationMeta'
+
+  /bills/{period}:
+    get:
+      tags: [Bills]
+      summary: 指定账期账单详情
+      parameters:
+        - name: period
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+            example: '2026-06'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TenantBillDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /bills/{period}/export:
+    get:
+      tags: [Bills]
+      summary: 导出对账单
+      parameters:
+        - name: period
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [csv, xlsx]
+            default: csv
+      responses:
+        '200':
+          description: 文件流
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  # ──────────────────── Dashboard ────────────────────
+  /dashboard/overview:
+    get:
+      tags: [Dashboard]
+      summary: 今日经营指标
+      description: 需要 `dashboard_read` 权限
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DashboardOverview'
+
+  /dashboard/trends:
+    get:
+      tags: [Dashboard]
+      summary: 7 天趋势数据
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 7
+            maximum: 30
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DashboardTrends'
+
+  # ──────────────────── Webhooks (预留) ────────────────────
+  /webhooks/register:
+    post:
+      tags: [Webhooks]
+      summary: 注册事件回调地址（预留）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, events]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum: [order.created, order.paid, order.shipped, order.refunded]
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+# ──────────────────── Components ────────────────────
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: AccessToken
+      description: 通过 POST /auth/token 获取
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+    PerPageParam:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+    ProductId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    OrderNo:
+      name: orderNo
+      in: path
+      required: true
+      schema:
+        type: string
+        example: ORD202607020001
+
+  responses:
+    Unauthorized:
+      description: 鉴权失败
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: 40101
+            message: Invalid or expired AccessToken
+            data: null
+    Forbidden:
+      description: 权限不足
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: 40301
+            message: Missing required permission order_manage
+            data: null
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: 40401
+            message: Resource not found
+            data: null
+    RateLimited:
+      description: API 配额超限
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: 42901
+            message: API daily quota exceeded
+            data:
+              tier: basic
+              quota: 10000
+              used: 10001
+    ValidationError:
+      description: 参数校验失败
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: 42201
+            message: Validation failed
+            data:
+              name: [The name field is required.]
+
+  schemas:
+    SuccessResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        message:
+          type: string
+          example: ok
+        data:
+          nullable: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          nullable: true
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+        last_page:
+          type: integer
+
+    TokenRequest:
+      type: object
+      required: [app_key, app_secret]
+      properties:
+        app_key:
+          type: string
+          example: AK_42819203
+        app_secret:
+          type: string
+          example: sk_live_xxxxxxxxxxxx
+
+    TokenResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                access_token:
+                  type: string
+                refresh_token:
+                  type: string
+                token_type:
+                  type: string
+                  example: Bearer
+                expires_in:
+                  type: integer
+                  example: 7200
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        product_code:
+          type: string
+          example: G-10002
+        name:
+          type: string
+        cover_image:
+          type: string
+          nullable: true
+        price:
+          type: number
+          format: double
+        stock:
+          type: integer
+        sales_count:
+          type: integer
+        specs:
+          type: object
+          additionalProperties:
+            type: string
+        status:
+          type: string
+          enum: [listed, unlisted]
+        created_at:
+          type: string
+          format: date-time
+
+    ProductCreate:
+      type: object
+      required: [name, price, stock]
+      properties:
+        name:
+          type: string
+        price:
+          type: number
+        stock:
+          type: integer
+        specs:
+          type: object
+          additionalProperties:
+            type: string
+        cover_image:
+          type: string
+
+    ProductUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        price:
+          type: number
+        stock:
+          type: integer
+        specs:
+          type: object
+          additionalProperties:
+            type: string
+
+    Order:
+      type: object
+      properties:
+        order_no:
+          type: string
+        buyer_name:
+          type: string
+        buyer_phone:
+          type: string
+        total_amount:
+          type: number
+        status:
+          type: string
+          enum: [pending_payment, paid, shipped, completed, refund_requested, cancelled]
+        created_at:
+          type: string
+          format: date-time
+
+    OrderDetail:
+      allOf:
+        - $ref: '#/components/schemas/Order'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/OrderItem'
+            paid_at:
+              type: string
+              format: date-time
+              nullable: true
+            shipped_at:
+              type: string
+              format: date-time
+              nullable: true
+
+    OrderItem:
+      type: object
+      properties:
+        product_name:
+          type: string
+        spec_snapshot:
+          type: object
+          additionalProperties:
+            type: string
+        unit_price:
+          type: number
+        quantity:
+          type: integer
+
+    OrderCreate:
+      type: object
+      required: [buyer_name, buyer_phone, items]
+      properties:
+        buyer_name:
+          type: string
+        buyer_phone:
+          type: string
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [product_id, quantity]
+            properties:
+              product_id:
+                type: integer
+              quantity:
+                type: integer
+                minimum: 1
+
+    TenantBill:
+      type: object
+      properties:
+        billing_period:
+          type: string
+          example: '2026-06'
+        transaction_total:
+          type: number
+        commission_amount:
+          type: number
+        api_usage_fee:
+          type: number
+        api_overage_fee:
+          type: number
+        total_receivable:
+          type: number
+        status:
+          type: string
+          enum: [pending_settlement, settled, overdue]
+        payment_channel:
+          type: string
+          nullable: true
+          description: 预留字段
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 预留字段
+
+    TenantBillDetail:
+      allOf:
+        - $ref: '#/components/schemas/TenantBill'
+        - type: object
+          properties:
+            merchant_reported_amount:
+              type: number
+              nullable: true
+            difference_amount:
+              type: number
+              nullable: true
+            line_items:
+              type: array
+              items:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    enum: [commission, api_usage, api_overage]
+                  amount:
+                    type: number
+                  description:
+                    type: string
+
+    DashboardOverview:
+      type: object
+      properties:
+        today_orders:
+          type: integer
+        today_amount:
+          type: number
+        refund_rate:
+          type: number
+        api_calls_today:
+          type: integer
+        api_quota_daily:
+          type: integer
+
+    DashboardTrends:
+      type: object
+      properties:
+        dates:
+          type: array
+          items:
+            type: string
+        order_counts:
+          type: array
+          items:
+            type: integer
+        amounts:
+          type: array
+          items:
+            type: number
