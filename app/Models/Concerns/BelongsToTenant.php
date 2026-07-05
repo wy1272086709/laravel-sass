@@ -24,7 +24,10 @@ trait BelongsToTenant
             /** @var TenantContext $context */
             $context = app(TenantContext::class);
 
-            if (property_exists($model, 'tenant_id') && $model->tenant_id === null) {
+            // 注意：tenant_id 是 Eloquent 动态属性（存于 $attributes），
+            // 不能用 property_exists() 判断（恒为 false）。直接取属性值即可，
+            // 未设置时 Eloquent 返回 null。
+            if ($model->tenant_id === null && $context->tenantId !== null) {
                 $model->tenant_id = $context->tenantId;
             }
         });
