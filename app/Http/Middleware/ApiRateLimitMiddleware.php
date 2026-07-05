@@ -8,6 +8,7 @@ use App\Application\Api\QuotaPolicyService;
 use App\Domain\Enums\PackageTier;
 use App\Domain\Tenant\TenantContext;
 use App\Infrastructure\Redis\ApiDailyCounter;
+use App\Models\Api\ApiKey;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -39,7 +40,7 @@ class ApiRateLimitMiddleware
             return $next($request);
         }
 
-        $quota = $this->quotaForTier($context->tier);
+        $quota = $this->quotaForRequest($request, $context->tier);
         $used = $this->counter->increment($context->tenantId, now()->toDateString());
 
         if ($this->policy->shouldBlock($context->tier, $used, $quota)) {
@@ -49,11 +50,16 @@ class ApiRateLimitMiddleware
         return $next($request);
     }
 
-    /**
-     * 各套餐默认日配额；阶段 2 起从 packages.api_quota_daily 取真实值。
-     */
-    private function quotaForTier(PackageTier $tier): int
+    private function quotaForRequest(Request $request, PackageTier $tier): int
     {
+        /** @var ApiKey|null $apiKey */
+        $apiKey = $request->attributes->get('api_key');
+        $quota = $apiKey?->tenant()->with('package')->first()?->package?->api_quota_daily;
+
+        if ($quota !== null) {
+            return (int) $quota;
+        }
+
         return match ($tier) {
             PackageTier::Basic => 10_000,
             PackageTier::Professional => 100_000,

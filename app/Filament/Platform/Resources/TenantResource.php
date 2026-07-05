@@ -6,6 +6,7 @@ namespace App\Filament\Platform\Resources;
 
 use App\Domain\Enums\TenantStatus;
 use App\Filament\Platform\Resources\TenantResource\Pages;
+use App\Http\Controllers\ImpersonationController;
 use App\Models\Tenant\Tenant;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -115,6 +116,12 @@ class TenantResource extends Resource
                 Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
+                Tables\Actions\Action::make('impersonate')
+                    ->label('进入商户后台')
+                    ->icon('heroicon-o-arrow-right-on-rectangle')
+                    ->color('info')
+                    ->requiresConfirmation()
+                    ->action(fn (Tenant $record) => app(ImpersonationController::class)->start(request(), $record)),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
                 Tables\Actions\RestoreAction::make(),

@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Casts\AsEnumArrayObject;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Laravel\Sanctum\HasApiTokens;
 
 /**
  * 开放 API 密钥（租户域）。
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class ApiKey extends Model
 {
-    use HasFactory, BelongsToTenant;
+    use BelongsToTenant, HasApiTokens, HasFactory;
 
     protected $guarded = [];
 
@@ -31,7 +32,7 @@ class ApiKey extends Model
     protected function casts(): array
     {
         return [
-            'permissions' => AsEnumArrayObject::class . ':' . ApiPermission::class,
+            'permissions' => AsEnumArrayObject::class.':'.ApiPermission::class,
             'status' => ApiKeyStatus::class,
             'last_used_at' => 'datetime',
         ];

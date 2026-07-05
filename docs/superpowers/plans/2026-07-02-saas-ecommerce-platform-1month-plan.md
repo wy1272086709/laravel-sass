@@ -342,6 +342,71 @@ php artisan test tests/Feature/Auth tests/Feature/Filament
 **时间盒：** 第 2 周后半周  
 **目标：** 按 OpenAPI 规范落地 `/api/v1` 网关，确保第三方系统能进行认证、查询、写入与限流。
 
+### 阶段 4-1：API Auth、Token 签发与错误信封
+
+**目标：** 先打通开放 API 的认证入口、Bearer Token 校验、租户上下文注入和统一错误响应，让后续业务接口可以安全接入。
+
+**Files:**
+- Create: `app/Domain/Api/AccessTokenService.php`
+- Create: `app/Http/Middleware/ApiAuthMiddleware.php`
+- Create: `app/Http/Middleware/ApiExceptionResponseMiddleware.php`
+- Create: `app/Http/Controllers/Api/V1/AuthController.php`
+- Create: `routes/api.php`
+- Modify: `bootstrap/app.php`
+- Modify: `app/Models/Api/ApiKey.php`
+- Test: `tests/Feature/Api/V1/AuthTokenTest.php`
+
+**Acceptance Criteria:**
+- `POST /api/v1/auth/token` 可用 `app_key + app_secret` 换取 `access_token` 与 `refresh_token`。
+- `POST /api/v1/auth/token/refresh` 可用 refresh token 换取新 token。
+- `DELETE /api/v1/auth/token` 可吊销当前 access token。
+- 无效/过期 Bearer token 返回 `{ code:40101, message:"Invalid or expired AccessToken", data:null }`。
+- 通过认证后请求内绑定 `TenantContext`，后续租户域查询自动隔离。
+- 验证失败返回 `{ code:42201, message:"Validation failed", data:{...} }`。
+
+### 阶段 4-2：Products / Orders MVP 接口
+
+**目标：** 优先交付开放 API 核心读写链路，覆盖商品与订单的 MVP 端点和权限校验。
+
+**Files:**
+- Create: `app/Http/Controllers/Api/V1/ProductController.php`
+- Create: `app/Http/Controllers/Api/V1/OrderController.php`
+- Create/Modify: API permission middleware / helpers
+- Test: `tests/Feature/Api/V1/ProductApiTest.php`
+- Test: `tests/Feature/Api/V1/OrderApiTest.php`
+
+**Acceptance Criteria:**
+- `product_query` 可访问商品列表/详情。
+- `order_manage` 可创建/查询/更新订单。
+- 缺权限返回 `40301`。
+- 所有资源查询受 `TenantScope` 约束。
+
+### 阶段 4-3：Bills / Dashboard / RateLimit 完整验收
+
+**目标：** 补齐账单、经营看板、真实套餐配额读取和全局异常映射。
+
+**Files:**
+- Create: `app/Http/Controllers/Api/V1/BillController.php`
+- Create: `app/Http/Controllers/Api/V1/DashboardController.php`
+- Modify: `app/Http/Middleware/ApiRateLimitMiddleware.php`
+- Test: `tests/Feature/Api/V1/BillApiTest.php`
+- Test: `tests/Feature/Api/V1/RateLimitTest.php`
+
+**Acceptance Criteria:**
+- 账单与 Dashboard 接口返回统一成功信封。
+- 配额从 `packages.api_quota_daily` 读取。
+- 基础版超额 429；专业/企业版 150% 全局阻断。
+- 常见异常统一映射为 `40101`、`40301`、`40401`、`42201`、`42901`。
+
+### 阶段 4 问题记录
+
+| 日期 | 阶段 | 状态 | 问题 | 处理记录 |
+|------|------|------|------|----------|
+| 2026-07-05 | 4-1 | resolved | OpenAPI 中 `/auth/token` 重复定义，YAML 解析可能覆盖 `post` 或 `delete`。 | 已合并为同一个 path 下的 `post` 与 `delete`，与 Laravel 路由保持一致。 |
+| 2026-07-05 | 4-1 | resolved | AccessToken/RefreshToken 是否都使用 Sanctum `personal_access_tokens` 存储，还是独立 refresh token 表。 | MVP 阶段采用 Sanctum token name/ability 区分 access 与 refresh；refresh token 单次使用后删除，后续若要加强轮换审计再拆独立表。 |
+| 2026-07-05 | 4-2 | open | OpenAPI 发货/退款请求包含 `tracking_no`、`carrier`、`amount`，但当前 `orders` 表没有物流与退款审计字段。 | 4-2 先按状态流转 MVP 实现 ship/cancel/refund，不持久化额外字段；后续如需物流轨迹和退款明细再补迁移与审计表。 |
+| 2026-07-05 | 4-2 | resolved | Products API 使用隐式路由模型绑定时，模型可能在 `api.auth` 绑定租户上下文前解析，导致跨租户资源绕过 `TenantScope`。 | 已改为控制器内显式 `Product::query()->findOrFail()`，确保查询发生在 `api.auth` 注入 `TenantContext` 之后；新增跨租户 404 测试覆盖。 |
+
 **Files:**
 - Create: `app/Domain/Api/AccessTokenService.php`
 - Create: `app/Application/Api/QuotaPolicyService.php`
@@ -366,31 +431,35 @@ php artisan test tests/Feature/Auth tests/Feature/Filament
 - Produces: `/api/v1/auth/*`, `/api/v1/products*`, `/api/v1/orders*`, `/api/v1/bills*`, `/api/v1/dashboard/*`
 - Produces: 统一错误格式 `{ code, message, data }`
 
-- [ ] **Step 1: 先写 Auth 与 RateLimit 失败测试**
-
-```php
-it('returns 429 when basic tier exceeds quota', function () {
-    $response = $this->withToken('fake-token')->getJson('/api/v1/products');
-
-    $response->assertStatus(429);
-});
-```
-
-- [ ] **Step 2: 优先实现 Auth、Products、Orders**
+- [x] **Step 1: 完成阶段 4-1：API Auth、Token 签发与错误信封**
 
 Run:
 
 ```bash
-php artisan test tests/Feature/Api/V1/AuthTokenTest.php tests/Feature/Api/V1/ProductApiTest.php tests/Feature/Api/V1/OrderApiTest.php
+php artisan test tests/Feature/Api/V1/AuthTokenTest.php
 ```
 
-- [ ] **Step 3: 实现 Bills、Dashboard 与全局异常中间件**
+Result: 2026-07-05 已通过 `php artisan test tests/Feature/Api/V1/AuthTokenTest.php`、`php artisan test`、`php artisan migrate:fresh --seed`、`pnpm build`。
+
+- [x] **Step 2: 完成阶段 4-2：Products / Orders MVP 接口**
+
+Run:
+
+```bash
+php artisan test tests/Feature/Api/V1/ProductApiTest.php tests/Feature/Api/V1/OrderApiTest.php
+```
+
+Result: 2026-07-05 已通过 `php artisan test tests/Feature/Api/V1/ProductApiTest.php tests/Feature/Api/V1/OrderApiTest.php`、`php artisan test`、`php artisan migrate:fresh --seed`、`pnpm build`。
+
+- [x] **Step 3: 完成阶段 4-3：Bills / Dashboard / RateLimit 完整验收**
 
 Run:
 
 ```bash
 php artisan test tests/Feature/Api/V1
 ```
+
+Result: 2026-07-05 已通过 `php artisan test tests/Feature/Api/V1/BillApiTest.php tests/Feature/Api/V1/DashboardApiTest.php tests/Feature/Api/V1/RateLimitApiTest.php`、`php artisan test`、`php artisan migrate:fresh --seed`、`pnpm build`。
 
 - [ ] **Step 4: 验收标准**
 

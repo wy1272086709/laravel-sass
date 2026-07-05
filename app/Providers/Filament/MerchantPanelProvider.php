@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Auth\UnifiedLogin;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -30,7 +31,7 @@ class MerchantPanelProvider extends PanelProvider
         return $panel
             ->id('merchant')
             ->path('merchant')
-            ->login()
+            ->login(UnifiedLogin::class)
             ->authGuard('merchant')
             ->brandName('SaaS 电商中台 · 商户后台')
             ->colors([
