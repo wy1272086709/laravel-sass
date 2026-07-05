@@ -18,12 +18,19 @@ class ApiKeyFactory extends Factory
     {
         return [
             'tenant_id' => Tenant::factory(),
-            'name' => $this->faker->word() . ' ERP',
-            'app_key' => 'AK_' . $this->faker->unique()->numerify('########'),
+            'name' => $this->faker->word().' ERP',
+            'app_key' => 'AK_'.$this->faker->unique()->numerify('########'),
             'app_secret' => Hash::make('secret'), // HASH 存储
             'permissions' => [ApiPermission::ProductQuery, ApiPermission::OrderManage],
             'status' => ApiKeyStatus::Enabled,
             'last_used_at' => null,
         ];
+    }
+
+    public function forTenant(Tenant $tenant): static
+    {
+        return $this->state(fn (): array => [
+            'tenant_id' => $tenant->id,
+        ]);
     }
 }

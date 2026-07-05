@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Models\Platform;
 
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -14,7 +16,7 @@ use Laravel\Sanctum\HasApiTokens;
  *
  * $fillable 与 SDD §2.2 / 平台后台用例一致；password 哈希存储。
  */
-class PlatformUser extends Authenticatable
+class PlatformUser extends Authenticatable implements FilamentUser
 {
     use HasApiTokens, HasFactory;
 
@@ -47,5 +49,10 @@ class PlatformUser extends Authenticatable
     public function role(): BelongsTo
     {
         return $this->belongsTo(PlatformRole::class, 'role_id');
+    }
+
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return $panel->getId() === 'platform';
     }
 }

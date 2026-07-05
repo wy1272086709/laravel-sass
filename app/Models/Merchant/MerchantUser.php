@@ -6,6 +6,8 @@ namespace App\Models\Merchant;
 
 use App\Models\Concerns\BelongsToTenant;
 use App\Models\Tenant\Tenant;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -14,9 +16,9 @@ use Laravel\Sanctum\HasApiTokens;
 /**
  * 商户用户（merchant guard，租户域，带 tenant_id + TenantScope）。
  */
-class MerchantUser extends Authenticatable
+class MerchantUser extends Authenticatable implements FilamentUser
 {
-    use HasApiTokens, HasFactory, BelongsToTenant;
+    use BelongsToTenant, HasApiTokens, HasFactory;
 
     protected $table = 'merchant_users';
 
@@ -48,5 +50,10 @@ class MerchantUser extends Authenticatable
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return $panel->getId() === 'merchant' && $this->is_active;
     }
 }

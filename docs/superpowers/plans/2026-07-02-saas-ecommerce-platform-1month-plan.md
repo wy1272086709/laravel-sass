@@ -189,10 +189,82 @@ php artisan migrate:fresh --seed
 
 ---
 
-## 阶段 3：Filament 双端后台全部 CRUD Resource 页面
+## 阶段 3：Filament 双端后台 CRUD 与系统切换
 
 **时间盒：** 第 2 周前半周  
-**目标：** 先交付平台端与商户端所有纯 Filament 页面，让后台管理能力完整可用。
+**目标：** 分批交付平台端与商户端 Filament 页面，先把核心经营链路跑通，再补齐营销/API/账单和 Impersonation。
+
+### 阶段 3-1：前端依赖与核心 CRUD 骨架
+
+**目标：** 统一使用 `pnpm` 安装前端依赖，并交付第一批可访问的 Filament Resource：平台端商户/套餐，商户端商品/订单。
+
+**Files:**
+- Modify: `package.json`
+- Create: `pnpm-lock.yaml`
+- Create/Modify: `vite.config.js`
+- Create: `app/Filament/Platform/Resources/TenantResource.php`
+- Create: `app/Filament/Platform/Resources/PackageResource.php`
+- Create: `app/Filament/Merchant/Resources/ProductResource.php`
+- Create: `app/Filament/Merchant/Resources/OrderResource.php`
+- Test: `tests/Feature/Filament/Platform/TenantResourceTest.php`
+- Test: `tests/Feature/Filament/Platform/PackageResourceTest.php`
+- Test: `tests/Feature/Filament/Merchant/ProductResourceTest.php`
+- Test: `tests/Feature/Filament/Merchant/OrderResourceTest.php`
+
+**Commands:**
+
+```bash
+pnpm add vue@3 echarts vue-echarts
+pnpm add -D @vitejs/plugin-vue
+pnpm build
+php artisan test tests/Feature/Filament
+```
+
+**Acceptance Criteria:**
+- 仅使用 `pnpm` 管理前端依赖，生成 `pnpm-lock.yaml`，不引入 `npm` / `yarn` 锁文件。
+- `pnpm build` 可通过。
+- 平台端可访问商户管理、套餐配置 Resource。
+- 商户端可访问商品管理、订单管理 Resource。
+- 商户端 Resource 查询受 `TenantContext` / `TenantScope` 约束，不跨商户展示数据。
+
+### 阶段 3-2：商户经营页面补齐
+
+**目标：** 补齐商户端经营后台的剩余纯 Filament 页面，让商户日常操作闭环。
+
+**Files:**
+- Create: `app/Filament/Merchant/Resources/CouponResource.php`
+- Create: `app/Filament/Merchant/Resources/ApiKeyResource.php`
+- Create: `app/Filament/Merchant/Resources/TenantBillResource.php`
+- Create: `app/Filament/Merchant/Pages/MerchantDashboardPage.php`
+- Test: `tests/Feature/Filament/Merchant/CouponResourceTest.php`
+- Test: `tests/Feature/Filament/Merchant/ApiKeyResourceTest.php`
+- Test: `tests/Feature/Filament/Merchant/TenantBillResourceTest.php`
+
+**Acceptance Criteria:**
+- 商户端可访问店铺概览、营销优惠、API 密钥、月度账单。
+- API 密钥列表隐藏 `app_secret`，权限字段按 `ApiPermission` 枚举展示/编辑。
+- 月度账单展示支付预留字段与账单状态，不对接真实支付。
+
+### 阶段 3-3：平台权限、统一登录与 Impersonation
+
+**目标：** 补齐平台侧权限管理、个人中心、统一登录页和平台进入商户后台链路。
+
+**Files:**
+- Create: `app/Filament/Pages/Auth/UnifiedLogin.php`
+- Create: `app/Filament/Platform/Resources/PlatformRoleResource.php`
+- Create: `app/Filament/Platform/Pages/PlatformProfilePage.php`
+- Create: `app/Http/Controllers/ImpersonationController.php`
+- Test: `tests/Feature/Auth/DualGuardLoginTest.php`
+- Test: `tests/Feature/Auth/ImpersonationTest.php`
+- Test: `tests/Feature/Filament/Platform/PlatformRoleResourceTest.php`
+
+**Acceptance Criteria:**
+- 登录页支持平台管理员 / 商户 Tab 切换。
+- 平台端可访问角色权限、个人中心。
+- 平台管理员可成功进入任一商户后台并返回平台。
+- Impersonation 全程写入审计日志。
+
+### 阶段 3 总文件边界
 
 **Files:**
 - Create: `app/Providers/Filament/PlatformPanelProvider.php`
@@ -219,32 +291,42 @@ php artisan migrate:fresh --seed
 - Produces: `platform` / `merchant` 双 Panel
 - Produces: “进入商户后台 / 返回平台总后台”切换能力
 
-- [ ] **Step 1: 配置双 Guard 与统一登录页**
+- [ ] **Step 1: 完成阶段 3-1：前端依赖与核心 CRUD 骨架**
+
+Run:
+
+```bash
+pnpm build
+php artisan test tests/Feature/Filament
+```
+
+- [ ] **Step 2: 完成阶段 3-2：商户经营页面补齐**
+
+Run:
+
+```bash
+php artisan test tests/Feature/Filament/Merchant
+```
+
+- [ ] **Step 3: 完成阶段 3-3：平台权限、统一登录与 Impersonation**
 
 Run:
 
 ```bash
 php artisan test tests/Feature/Auth/DualGuardLoginTest.php
-```
-
-- [ ] **Step 2: 生成并实现所有 Resource 与 Page**
-
-Run:
-
-```bash
-php artisan make:filament-resource Tenant --panel=platform
-php artisan make:filament-resource Product --panel=merchant
-```
-
-- [ ] **Step 3: 接入 Impersonation**
-
-Run:
-
-```bash
 php artisan test tests/Feature/Auth/ImpersonationTest.php
 ```
 
-- [ ] **Step 4: 验收标准**
+- [ ] **Step 4: 全阶段验收**
+
+Run:
+
+```bash
+pnpm build
+php artisan test tests/Feature/Auth tests/Feature/Filament
+```
+
+- [ ] **Step 5: 验收标准**
 
 **Acceptance Criteria:**
 - 平台端可访问：商户管理、套餐配置、角色权限、个人中心
