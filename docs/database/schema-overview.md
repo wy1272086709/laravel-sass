@@ -283,13 +283,13 @@ trait BelongsToTenant
 ```
 database/factories/
 ├── Platform/
+│   ├── PackageFactory.php
 │   └── PlatformUserFactory.php
 ├── Tenant/
 │   ├── TenantFactory.php
 │   └── MerchantUserFactory.php
 ├── Product/
-│   ├── ProductFactory.php
-│   └── ProductSkuFactory.php
+│   └── ProductFactory.php
 ├── Order/
 │   ├── OrderFactory.php
 │   └── OrderItemFactory.php
@@ -299,11 +299,13 @@ database/factories/
 │   ├── ApiKeyFactory.php
 │   └── ApiRequestLogFactory.php
 ├── Billing/
+│   ├── ReconciliationDiscrepancyFactory.php
 │   └── TenantBillFactory.php
 ├── Risk/
-│   └── RiskAlertFactory.php
-├── PackageFactory.php
-└── QueueJobLogFactory.php
+│   ├── RiskAlertFactory.php
+│   └── RiskRuleFactory.php
+└── System/
+    └── QueueJobLogFactory.php
 ```
 
 ### Factory 示例：TenantFactory
@@ -336,19 +338,7 @@ database/seeders/
 ├── DatabaseSeeder.php            主入口，按序调用
 ├── PackageSeeder.php             三档套餐（基础/专业/企业）
 ├── PlatformAdminSeeder.php       平台管理员 + 角色权限
-├── TenantSeeder.php              12 个演示商户
-├── MerchantUserSeeder.php        每商户 1-2 个员工
-├── ProductSeeder.php             每商户 10-20 个商品
-├── ProductSkuSeeder.php          预留 SKU 种子（每 SPU 1 条默认 SKU）
-├── OrderSeeder.php               每商户 100-500 单（总计 ~4285）
-├── CouponSeeder.php              每商户 3-5 张优惠券
-├── ApiKeySeeder.php              每商户 1-2 个 API 密钥
-├── TenantBillSeeder.php          近 6 个月账单（含待结算/已结清/逾期）
-├── RiskRuleSeeder.php            5 条内置风控规则
-├── RiskAlertSeeder.php           10-20 条演示告警
-├── ApiRequestLogSeeder.php       近 24h API 调用日志（~5000 条）
-├── QueueJobLogSeeder.php         队列任务演示（13010 条模拟）
-└── LoginLogSeeder.php            近 5 条登录记录
+└── TenantSeeder.php              3 个演示商户 + 商品/订单/优惠券/API Key/月账单
 ```
 
 ### DatabaseSeeder 调用顺序
@@ -360,18 +350,6 @@ public function run(): void
         PackageSeeder::class,
         PlatformAdminSeeder::class,
         TenantSeeder::class,
-        MerchantUserSeeder::class,
-        ProductSeeder::class,
-        ProductSkuSeeder::class,
-        OrderSeeder::class,
-        CouponSeeder::class,
-        ApiKeySeeder::class,
-        TenantBillSeeder::class,
-        RiskRuleSeeder::class,
-        RiskAlertSeeder::class,
-        ApiRequestLogSeeder::class,
-        QueueJobLogSeeder::class,
-        LoginLogSeeder::class,
     ]);
 }
 ```

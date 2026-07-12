@@ -11,6 +11,7 @@
 │                     规范层 (Specification Layer)                 │
 │                                                                   │
 │  docs/api/openapi.yaml        OpenAPI 3.0 对外接口契约            │
+│  docs/api/internal.yaml       平台内部面板接口契约                │
 │  app/Domain/*/Enums/          PHP 8.3 Backed Enum 枚举契约         │
 │  app/Domain/*/DTO/            数据传输对象（请求/响应）            │
 │  config/permissions.php       权限矩阵（平台角色 × 权限点）        │
@@ -22,7 +23,7 @@
 │                                                                   │
 │  app/Filament/Platform/         PlatformPanel (Guard: platform)   │
 │    ├── Resources/               TenantResource, PackageResource…  │
-│    ├── Pages/                   DashboardPage (Vue3 壳)           │
+│    ├── Pages/                   4 个 Vue3 面板页                  │
 │    └── Widgets/                 StatsOverview                     │
 │                                                                   │
 │  app/Filament/Merchant/         MerchantPanel (Guard: merchant) │
@@ -30,6 +31,7 @@
 │    └── Pages/                   MerchantDashboardPage             │
 │                                                                   │
 │  resources/js/panels/           4 个 Vue3 Echarts 嵌入组件        │
+│  app/Http/Controllers/Internal/ 平台内部面板 JSON 接口             │
 │  app/Http/Controllers/          ImpersonationController          │
 │                                                                   │
 │  职责：UI 渲染、表单校验、表格交互、权限菜单、系统切换              │
@@ -78,7 +80,7 @@
 ┌────────────────────────────▼────────────────────────────────────┐
 │            MySQL 持久层 (Persistence Layer)                      │
 │                                                                   │
-│  database/migrations/           28 张表迁移                        │
+│  database/migrations/           26 张表迁移                        │
 │  app/Models/ + TenantScope      Eloquent + 全局 tenant_id 过滤    │
 │  database/factories/            测试数据工厂                       │
 │  database/seeders/              演示种子数据                       │
@@ -130,6 +132,25 @@
 5. OctaneTenantCleanupMiddleware
 6. Response
 ```
+
+## 请求生命周期（平台 Vue 面板）
+
+```
+1. HTTP Request → /platform/api-monitoring
+2. Filament Auth Middleware (Guard: platform)
+3. Blade 壳加载 Vite entry → resources/js/panels/api-monitoring.js
+4. Vue 组件请求 /api/internal/platform/api-monitor
+5. Internal Controller 聚合 MySQL / Redis / Queue 数据
+6. Echarts 渲染趋势、分布、列表
+```
+
+内部面板接口：
+- `GET /api/internal/platform/dashboard`
+- `GET /api/internal/platform/api-monitor`
+- `GET /api/internal/platform/queue-ops`
+- `GET /api/internal/platform/risk-recon`
+
+这些接口只走平台后台 session，不对第三方开放。契约见 `docs/api/internal.yaml`。
 
 ---
 

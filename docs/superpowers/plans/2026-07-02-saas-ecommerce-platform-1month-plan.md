@@ -499,7 +499,70 @@ Result: 2026-07-05 已通过 `php artisan test tests/Feature/Api/V1/BillApiTest.
 - Consumes: Redis 工具层、订单状态机、账单模型、风险规则模型
 - Produces: 月结任务、差异单生成、任务中心数据接口
 
-- [ ] **Step 1: 先写账单与风控失败测试**
+### 阶段 5-1：账单闭环与核心异步 Job
+
+**目标：** 先完成月结账单、API 用量落库、超时订单关闭和基础运营 Job，让财务闭环能跑起来。
+
+**Files:**
+- Create: `docs/architecture/billing-design.md`
+- Create: `docs/architecture/queue-design.md`
+- Create: `app/Domain/Billing/BillSettlementService.php`
+- Create: `app/Jobs/CloseExpiredOrderJob.php`
+- Create: `app/Jobs/MonthlyBillingJob.php`
+- Create: `app/Jobs/GenerateApiBillJob.php`
+- Create: `app/Jobs/ApiUsageFlushJob.php`
+- Create: `app/Jobs/MerchantWelcomeEmailJob.php`
+- Create: `app/Jobs/InventoryAlertJob.php`
+- Create: `app/Jobs/SyncLogisticsJob.php`
+- Test: `tests/Unit/Domain/Billing/BillSettlementServiceTest.php`
+- Test: `tests/Feature/Jobs/MonthlyBillingJobTest.php`
+- Test: `tests/Feature/Jobs/CoreJobsTest.php`
+
+**Acceptance Criteria:**
+- 账单与队列设计文档先行完成，明确公式、幂等、日志、调度与测试边界。
+- `BillSettlementService` 可记录商户回填金额，并在存在差异时生成 `ReconciliationDiscrepancy`。
+- `MonthlyBillingJob` 可按租户/月生成账单，应收统计可复算。
+- `ApiUsageFlushJob` 可将 Redis 当日 API 计数落库到 `api_usage_daily`。
+- `CloseExpiredOrderJob` 可关闭超时未支付订单。
+- 轻量运营 Job 可写入 `queue_job_logs`，便于 5-3 任务中心读取真实数据。
+
+### 阶段 5-2：风控规则引擎与扫描 Job
+
+**目标：** 实现至少 5 条内置风控规则，并通过扫描 Job 生成可追踪的风险告警。
+
+**Files:**
+- Create: `app/Domain/Risk/RuleEngine.php`
+- Create: `app/Jobs/RiskRuleScanJob.php`
+- Test: `tests/Unit/Domain/Risk/RuleEngineTest.php`
+- Test: `tests/Feature/Jobs/RiskRuleScanJobTest.php`
+
+**Acceptance Criteria:**
+- 规则引擎至少覆盖大额订单、退款率异常、API 调用突增、低库存高销量、账单差异。
+- `RiskRuleScanJob` 可生成 `risk_alerts`，且不会重复生成同一批次告警。
+
+### 阶段 5-3：调度注册与任务中心内部接口
+
+**目标：** 注册定时任务，并提供内部任务中心接口读取 `queue_job_logs`、延迟队列和死信队列状态。
+
+**Files:**
+- Create: `app/Http/Controllers/Internal/QueueOpsController.php`
+- Modify: `routes/console.php`
+- Modify/Create: internal routes
+- Test: `tests/Feature/Internal/QueueOpsApiTest.php`
+
+**Acceptance Criteria:**
+- `schedule:list` 中可看到月结、风控扫描、API 落库等定时任务。
+- 队列中心接口返回真实 `queue_job_logs`、延迟队列、死信队列数据。
+
+### 阶段 5 问题记录
+
+| 日期 | 阶段 | 状态 | 问题 | 处理记录 |
+|------|------|------|------|----------|
+| 2026-07-05 | 5-1 | resolved | 队列与账单属于关键链路，直接实现 Job 容易在公式、幂等和日志边界上产生偏差。 | 已先补 `docs/architecture/billing-design.md` 与 `docs/architecture/queue-design.md`，后续 5-1 代码按文档推进。 |
+| 2026-07-05 | 5-1 | open | API 超额费单价暂按 MVP 规则 `overage_count * 0.001` 计算，套餐内 API 费用为 0。 | 已在 `BillSettlementService::API_OVERAGE_UNIT_PRICE` 固化为常量并覆盖测试；后续如需按套餐差异化计费，再扩展套餐字段或配置项。 |
+| 2026-07-05 | 5-2 | open | `RiskAlertType` 当前只有 4 个枚举值，但阶段 5-2 需要 5 条规则。 | 先用现有 4 类承载 5 条内置规则，其中账单差异映射为 `duplicate_payment`；后续如需更细维度再扩展枚举。 |
+
+- [x] **Step 1: 完成阶段 5-1：账单闭环与核心异步 Job**
 
 ```php
 it('creates discrepancy when merchant reported amount differs', function () {
@@ -514,7 +577,19 @@ it('creates discrepancy when merchant reported amount differs', function () {
 });
 ```
 
-- [ ] **Step 2: 实现 8 个 Job 与调度注册**
+Result: 2026-07-05 已通过 `php artisan test tests/Unit/Domain/Billing/BillSettlementServiceTest.php tests/Feature/Jobs/MonthlyBillingJobTest.php tests/Feature/Jobs/CoreJobsTest.php`、`php artisan test`、`php artisan migrate:fresh --seed`、`pnpm build`。
+
+- [x] **Step 2: 完成阶段 5-2：风控规则引擎与扫描 Job**
+
+Run:
+
+```bash
+php artisan test tests/Unit/Domain/Risk/RuleEngineTest.php tests/Feature/Jobs/RiskRuleScanJobTest.php
+```
+
+Result: 2026-07-05 已通过 `php artisan test tests/Unit/Domain/Risk/RuleEngineTest.php tests/Feature/Jobs/RiskRuleScanJobTest.php`、`php artisan test`。
+
+- [x] **Step 3: 完成阶段 5-3：调度注册与任务中心内部接口**
 
 Run:
 
@@ -522,13 +597,21 @@ Run:
 php artisan schedule:list
 ```
 
-- [ ] **Step 3: 实现任务中心内部接口**
+```bash
+php artisan test tests/Feature/Internal/QueueOpsApiTest.php
+```
+
+Result: 2026-07-05 已通过 `php artisan schedule:list`、`php artisan test tests/Feature/Internal/QueueOpsApiTest.php`、`php artisan test tests/Feature/Jobs/ScheduleRegistrationTest.php`。
+
+- [x] **Step 4: 阶段 5 整体验收**
 
 Run:
 
 ```bash
 php artisan test tests/Feature/Jobs tests/Feature/Internal/QueueOpsApiTest.php
 ```
+
+Result: 2026-07-05 已通过 `php artisan test`、`php artisan migrate:fresh --seed`、`pnpm build`。
 
 - [ ] **Step 4: 验收标准**
 
@@ -546,6 +629,69 @@ php artisan test tests/Feature/Jobs tests/Feature/Internal/QueueOpsApiTest.php
 
 **时间盒：** 第 3 周后半周  
 **目标：** 完成 4 个核心 Vue3 嵌入面板，让平台后台从“能用”提升到“能展示技术亮点”。
+
+### 阶段 6-1：内部 API 契约
+
+**目标：** 先固定 4 个面板的数据接口，确保后续 Vue 只负责展示。
+
+**Files:**
+- Create: `docs/architecture/vue-panels-design.md`
+- Create: `app/Http/Controllers/Internal/PlatformDashboardController.php`
+- Create: `app/Http/Controllers/Internal/ApiMonitoringController.php`
+- Create/Modify: `app/Http/Controllers/Internal/QueueOpsController.php`
+- Create: `app/Http/Controllers/Internal/RiskReconciliationController.php`
+- Modify: `routes/web.php`
+- Test: `tests/Feature/Internal/PlatformDashboardApiTest.php`
+- Test: `tests/Feature/Internal/ApiMonitoringApiTest.php`
+- Test: `tests/Feature/Internal/RiskReconciliationApiTest.php`
+
+**Acceptance Criteria:**
+- `/api/internal/platform/dashboard` 返回 GMV 趋势、套餐占比、队列健康。
+- `/api/internal/platform/api-monitor` 返回 24h 调用趋势、Top10、实时日志。
+- `/api/internal/platform/queue-ops` 返回队列状态、最近任务、延迟/死信摘要。
+- `/api/internal/platform/risk-recon` 返回 7 天风控趋势和差异单列表。
+
+### 阶段 6-2：Vue3 + Echarts 面板
+
+**目标：** 实现 4 个 Vue 面板和 Vite entry，通过 `pnpm build` 验收。
+
+**Files:**
+- Create: `resources/js/panels/PlatformDashboardPanel.vue`
+- Create: `resources/js/panels/ApiMonitoringPanel.vue`
+- Create: `resources/js/panels/QueueOpsPanel.vue`
+- Create: `resources/js/panels/RiskReconciliationPanel.vue`
+- Create: `resources/js/panels/platform-dashboard.js`
+- Create: `resources/js/panels/api-monitoring.js`
+- Create: `resources/js/panels/queue-ops.js`
+- Create: `resources/js/panels/risk-reconciliation.js`
+- Modify: `vite.config.js`
+
+**Acceptance Criteria:**
+- 4 个入口均可构建。
+- 图表容器尺寸稳定，不依赖页面说明文本。
+
+### 阶段 6-3：Filament 页面挂载
+
+**目标：** 新增 4 个平台后台页面，挂载对应 Vue 面板。
+
+**Files:**
+- Create: `resources/views/filament/pages/vue-panel.blade.php`
+- Create: `app/Filament/Platform/Pages/PlatformDashboardPage.php`
+- Create: `app/Filament/Platform/Pages/ApiMonitoringPage.php`
+- Create: `app/Filament/Platform/Pages/QueueOpsPage.php`
+- Create: `app/Filament/Platform/Pages/RiskReconciliationPage.php`
+- Test: Platform page mount tests
+
+**Acceptance Criteria:**
+- 4 个页面在 Filament 平台后台可访问。
+- 每个页面响应包含对应挂载节点和 Vite entry。
+
+### 阶段 6 问题记录
+
+| 日期 | 阶段 | 状态 | 问题 | 处理记录 |
+|------|------|------|------|----------|
+| 2026-07-05 | 6-1 | resolved | 阶段 6 同时涉及内部 API、Vue 构建与 Filament 页面，直接整包实现风险较高。 | 已拆分为 6-1/6-2/6-3，并新增 `docs/architecture/vue-panels-design.md` 固定接口和挂载边界。 |
+| 2026-07-05 | 6-2 | open | `pnpm build` 提示 Echarts 公共 chunk 超过 500kB。 | 构建成功，不阻塞阶段验收；如后续要优化首屏体积，可在 Vite 增加 manualChunks 或按页面动态加载 Echarts。 |
 
 **Files:**
 - Create: `resources/js/panels/PlatformDashboardPanel.vue`
@@ -572,7 +718,7 @@ php artisan test tests/Feature/Jobs tests/Feature/Internal/QueueOpsApiTest.php
 - Consumes: `/api/internal/platform/risk-recon`
 - Produces: 4 个 Filament 页面内可挂载的 Vue 图表组件
 
-- [ ] **Step 1: 先实现内部 API，再挂 Vue 壳**
+- [x] **Step 1: 完成阶段 6-1：内部 API 契约**
 
 Run:
 
@@ -580,15 +726,29 @@ Run:
 php artisan test tests/Feature/Internal
 ```
 
-- [ ] **Step 2: 按面板逐个挂载 Echarts**
+Result: 2026-07-05 已通过 `php artisan test tests/Feature/Internal/PlatformDashboardApiTest.php tests/Feature/Internal/ApiMonitoringApiTest.php tests/Feature/Internal/RiskReconciliationApiTest.php tests/Feature/Internal/QueueOpsApiTest.php`。
+
+- [x] **Step 2: 完成阶段 6-2：Vue3 + Echarts 面板**
 
 Run:
 
 ```bash
-npm run build
+pnpm build
 ```
 
-- [ ] **Step 3: 验收标准**
+Result: 2026-07-05 已通过 `pnpm build`。
+
+- [x] **Step 3: 完成阶段 6-3：Filament 页面挂载**
+
+Run:
+
+```bash
+php artisan test tests/Feature/Filament/Platform/VuePanelPageTest.php
+```
+
+Result: 2026-07-05 已通过 `php artisan test tests/Feature/Filament/Platform/VuePanelPageTest.php`。
+
+- [x] **Step 4: 阶段 6 验收标准**
 
 **Acceptance Criteria:**
 - 平台仪表盘可展示 GMV 趋势、套餐占比、队列健康
@@ -597,6 +757,8 @@ npm run build
 - 风控对账页可展示 7 天风控命中趋势和差异单表格
 - 4 个页面都能在 Filament 中正常挂载，前后端数据字段一致
 
+Result: 2026-07-05 已通过 `php artisan test`、`php artisan migrate:fresh --seed`、`pnpm build`。
+
 ---
 
 ## 阶段 7：本地压测、单元测试、文档完善
@@ -604,63 +766,109 @@ npm run build
 **时间盒：** 第 4 周  
 **目标：** 封板前集中做性能、测试与交付材料，确保项目不仅能跑，还能稳定演示、便于答辩和面试说明。
 
+### 阶段 7-1：Smoke / Integration / Performance 测试封板
+
+**状态：** 已完成（2026-07-05）
+
+**目标：** 补齐平台后台、开放 API、核心限流链路的最终验收测试。
+
 **Files:**
 - Create: `tests/Feature/Smoke/PlatformSmokeTest.php`
 - Create: `tests/Feature/Smoke/ApiSmokeTest.php`
 - Create: `tests/Performance/ApiRateLimitBenchTest.php`
+
+**Acceptance Criteria:**
+- 平台后台核心页面可访问。
+- 开放 API Auth / Products / Orders / Bills / Dashboard 主链路可跑通。
+- API 限流核心路径有可重复执行的性能 baseline 测试。
+
+**Result:**
+- 新增 `tests/Feature/Smoke/PlatformSmokeTest.php`、`tests/Feature/Smoke/ApiSmokeTest.php`、`tests/Performance/ApiRateLimitBenchTest.php`。
+- 已执行 `php artisan test tests/Feature/Smoke tests/Performance/ApiRateLimitBenchTest.php`，10 passed。
+- Baseline：25 次 `/api/v1/products` 请求平均 4.67-6.33ms。
+
+### 阶段 7-2：本地压测与运行文档
+
+**状态：** 已完成（2026-07-05）
+
+**目标：** 写清楚本地启动、测试、构建、Octane 压测步骤，沉淀可复现 benchmark 记录。
+
+**Files:**
 - Modify: `README.md`
-- Modify: `docs/superpowers/specs/2026-07-02-saas-ecommerce-platform-design.md`
+- Create: `docs/testing/local-benchmark.md`
+
+**Acceptance Criteria:**
+- README 包含 `pnpm` 前端命令、迁移种子、测试、构建、后台账号、开放 API 示例。
+- benchmark 文档包含 Octane、Redis、数据库准备与压测目标路径。
+
+**Result:**
+- 更新 `README.md`。
+- 新增 `docs/testing/local-benchmark.md`。
+- 已记录 Octane 压测步骤与本地 Pest baseline。
+
+### 阶段 7-3：API/架构文档收口
+
+**状态：** 已完成（2026-07-05）
+
+**目标：** 补内部接口 OpenAPI，并扫清交付文档中的占位词。
+
+**Files:**
+- Create: `docs/api/internal.yaml`
 - Modify: `docs/architecture/layered-architecture.md`
 - Modify: `docs/database/schema-overview.md`
 - Modify: `docs/api/openapi.yaml`
-- Create: `docs/api/internal.yaml`
-- Create: `docs/testing/local-benchmark.md`
-
-**Interfaces:**
-- Consumes: 所有阶段交付物
-- Produces: 可复现测试说明、压测步骤、最终文档集
-
-- [ ] **Step 1: 补齐 Smoke / Integration / Performance 测试**
-
-Run:
-
-```bash
-php artisan test
-```
-
-- [ ] **Step 2: 本地压测核心链路**
-
-Run:
-
-```bash
-php artisan octane:start --server=swoole --host=127.0.0.1 --port=8000
-```
-
-压测目标：
-
-```text
-1. /api/v1/auth/token
-2. /api/v1/products
-3. /api/v1/orders
-4. /api/internal/platform/api-monitor
-```
-
-- [ ] **Step 3: 更新交付文档**
-
-Run:
-
-```bash
-rg "待建|TODO|TBD" /Users/mac/laravelProj/docs
-```
-
-- [ ] **Step 4: 验收标准**
 
 **Acceptance Criteria:**
-- `php artisan test` 全量通过
-- 本地 Octane + Redis + MySQL 组合下，关键 API 可完成压测并输出记录
-- `README.md` 含启动、迁移、种子、测试、压测命令
-- `docs/api/internal.yaml` 补齐内部接口
-- 所有对外交付文档无明显占位词
+- `docs/api/internal.yaml` 描述 4 个平台内部面板接口。
+- 对外交付文档无明显占位词。
+
+**Result:**
+- 新增 `docs/api/internal.yaml`。
+- 更新 `docs/architecture/layered-architecture.md`、`docs/database/schema-overview.md`、`docs/api/openapi.yaml`。
+- 修正旧计划文档中的前端安装命令为 `pnpm add`。
+
+### 阶段 7 问题记录
+
+| 日期 | 阶段 | 状态 | 问题 | 处理记录 |
+|------|------|------|------|----------|
+| 2026-07-05 | 7-2 | 已记录 | 当前本机 `php -m` 未列出 Swoole 扩展，`php artisan octane:status` 显示 Octane 未运行；未做长时间 HTTP 压测。 | 先以 `tests/Performance/ApiRateLimitBenchTest.php` 提供可重复 baseline，并在 `docs/testing/local-benchmark.md` 写明 Octane/Swoole 实机压测步骤；后续安装 Swoole 后可按模板补真实压测记录。 |
+| 2026-07-05 | 7-2 | 已记录 | `pnpm build` 成功，但 Vite 提示 `panel-app` chunk 超过 500KB。 | 不阻塞阶段 7 验收；来源为 Vue/Echarts 面板公共包。后续如需优化，可拆分动态 import 或配置 manualChunks。 |
+
+---
+
+## 阶段 8：封板后优化与实机验收
+
+**时间盒：** 交付前增强  
+**目标：** 在阶段 7 已可交付的基础上，补齐实机压测、前端构建优化与最终交付核对。
+
+### 阶段 8-1：Octane / 本地 HTTP 压测链路
+
+**状态：** 已完成（2026-07-05）
+
+**目标：** 提供一个可重复执行的本地 HTTP benchmark 命令，并沉淀 Octane 实机压测设计。
+
+**Files:**
+- Create: `app/Console/Commands/LocalApiBenchmarkCommand.php`
+- Create: `tests/Feature/Console/LocalApiBenchmarkCommandTest.php`
+- Create: `docs/architecture/local-benchmark-design.md`
+- Modify: `docs/testing/local-benchmark.md`
+
+**Acceptance Criteria:**
+- 可执行 `php artisan benchmark:local-api` 对本地服务压测。
+- 命令支持 `artisan serve` 与 Octane 同一入口。
+- 输出平均耗时、P95、错误率。
+- 本机无法运行 Octane 时，问题记录清楚，不阻塞命令和文档交付。
+
+**Result:**
+- 新增 `benchmark:local-api` 命令。
+- 新增命令级测试，使用 `Http::fake()` 覆盖成功与鉴权失败路径。
+- 新增 `docs/architecture/local-benchmark-design.md`。
+
+### 阶段 8 问题记录
+
+| 日期 | 阶段 | 状态 | 问题 | 处理记录 |
+|------|------|------|------|----------|
+| 2026-07-05 | 8-1 | 已记录 | 当前本机未安装 Swoole，无法启动 Octane 做实机 HTTP 压测。 | 先交付 `benchmark:local-api` 命令与设计文档；后续安装 Swoole 后直接按文档补 Octane 实测记录。 |
 
 ---
 

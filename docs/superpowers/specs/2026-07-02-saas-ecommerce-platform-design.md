@@ -353,7 +353,7 @@ RiskRuleScanJob → 遍历 active rules → 查询阈值 → 命中写入 risk_a
 | 五层架构详述 | `docs/architecture/layered-architecture.md` |
 | 数据库结构 / 迁移 / Model / Factory | `docs/database/schema-overview.md` |
 | OpenAPI 3.0 规范 | `docs/api/openapi.yaml` |
-| 内部 API（Vue3 面板） | `docs/api/internal.yaml`（待建） |
+| 内部 API（Vue3 面板） | `docs/api/internal.yaml` |
 
 ---
 

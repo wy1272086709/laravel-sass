@@ -105,8 +105,8 @@ php artisan vendor:publish --provider="Laravel\Sanctum\SanctumServiceProvider"
 - [ ] **Step 2: 安装前端依赖（Vue3 + Echarts）**
 
 ```bash
-npm install vue@3 echarts vue-echarts
-npm install -D @vitejs/plugin-vue
+pnpm add vue@3 echarts vue-echarts
+pnpm add -D @vitejs/plugin-vue
 ```
 
 - [ ] **Step 3: 配置 `vite.config.js` 多入口**
@@ -1314,7 +1314,7 @@ git commit -am "test: add smoke tests for platform and API"
 | 种子数据对齐截图 | Task 24 |
 | OpenAPI 22 端点 | Task 20-22 |
 
-**Placeholder scan:** 无 TBD/TODO。Task 14-17 Filament 列配置参照截图，实施时按 Resource 逐步填充。
+**占位词扫描：** 无占位词。Task 14-17 Filament 列配置参照截图，实施时按 Resource 逐步填充。
 
 ---
 

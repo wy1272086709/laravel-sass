@@ -15,7 +15,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class ApiUsageDaily extends Model
 {
-    use HasFactory, BelongsToTenant;
+    use BelongsToTenant, HasFactory;
+
+    protected $table = 'api_usage_daily';
 
     protected $guarded = [];
 

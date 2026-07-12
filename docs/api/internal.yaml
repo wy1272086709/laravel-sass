@@ -1,0 +1,321 @@
+openapi: 3.0.3
+info:
+  title: SaaS 电商开放中台内部面板 API
+  description: |
+    平台后台 Vue3/Echarts 面板使用的内部接口。
+    这些接口走 `web` 与 `auth:platform` 中间件，只服务平台后台，不属于 `/api/v1` 对外开放 API。
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000
+    description: Local Development
+
+tags:
+  - name: Platform Internal
+    description: 平台后台内部面板接口
+
+security:
+  - PlatformSession: []
+
+paths:
+  /api/internal/platform/dashboard:
+    get:
+      tags: [Platform Internal]
+      summary: 平台经营总览
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PlatformDashboard'
+
+  /api/internal/platform/api-monitor:
+    get:
+      tags: [Platform Internal]
+      summary: API 调用监控
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ApiMonitor'
+
+  /api/internal/platform/queue-ops:
+    get:
+      tags: [Platform Internal]
+      summary: 队列运维面板
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/QueueOps'
+
+  /api/internal/platform/risk-recon:
+    get:
+      tags: [Platform Internal]
+      summary: 风控与对账面板
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/RiskReconciliation'
+
+components:
+  securitySchemes:
+    PlatformSession:
+      type: apiKey
+      in: cookie
+      name: laravel_session
+      description: 平台后台登录后的 Web Session。
+
+  schemas:
+    SuccessResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code:
+          type: integer
+          example: 0
+        message:
+          type: string
+          example: ok
+        data:
+          type: object
+
+    PlatformDashboard:
+      type: object
+      required: [summary, gmv_trend, package_distribution, queue_health]
+      properties:
+        summary:
+          type: object
+          properties:
+            tenant_count:
+              type: integer
+            order_count:
+              type: integer
+            gmv:
+              type: number
+            pending_bills:
+              type: integer
+        gmv_trend:
+          $ref: '#/components/schemas/TrendSeries'
+        package_distribution:
+          type: array
+          items:
+            type: object
+            properties:
+              tier:
+                type: string
+              name:
+                type: string
+              tenant_count:
+                type: integer
+        queue_health:
+          type: object
+          additionalProperties:
+            type: integer
+
+    ApiMonitor:
+      type: object
+      required: [summary, hourly_trend, top_tenants, recent_logs]
+      properties:
+        summary:
+          type: object
+          properties:
+            calls_today:
+              type: integer
+            errors_today:
+              type: integer
+            avg_duration_ms:
+              type: integer
+        hourly_trend:
+          type: object
+          properties:
+            hours:
+              type: array
+              items:
+                type: string
+            counts:
+              type: array
+              items:
+                type: integer
+            errors:
+              type: array
+              items:
+                type: integer
+        top_tenants:
+          type: array
+          items:
+            type: object
+            properties:
+              tenant_id:
+                type: integer
+              tenant_name:
+                type: string
+              request_count:
+                type: integer
+        recent_logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiRecentLog'
+
+    QueueOps:
+      type: object
+      required: [status_counts, recent_jobs, delayed, dead_letters]
+      properties:
+        status_counts:
+          type: object
+          additionalProperties:
+            type: integer
+        recent_jobs:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+              queue:
+                type: string
+              status:
+                type: string
+              tenant_id:
+                type: integer
+                nullable: true
+              finished_at:
+                type: string
+                nullable: true
+        delayed:
+          type: object
+          additionalProperties:
+            type: integer
+        dead_letters:
+          type: object
+          additionalProperties:
+            type: integer
+
+    RiskReconciliation:
+      type: object
+      required: [alert_trend, level_distribution, recent_alerts, discrepancies]
+      properties:
+        alert_trend:
+          type: object
+          properties:
+            dates:
+              type: array
+              items:
+                type: string
+                format: date
+            counts:
+              type: array
+              items:
+                type: integer
+        level_distribution:
+          type: object
+          additionalProperties:
+            type: integer
+        recent_alerts:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              tenant_name:
+                type: string
+                nullable: true
+              type:
+                type: string
+              risk_level:
+                type: string
+              status:
+                type: string
+              context:
+                type: object
+              triggered_at:
+                type: string
+                nullable: true
+        discrepancies:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              tenant_name:
+                type: string
+                nullable: true
+              billing_period:
+                type: string
+                nullable: true
+              difference_amount:
+                type: number
+              status:
+                type: string
+              note:
+                type: string
+                nullable: true
+
+    TrendSeries:
+      type: object
+      properties:
+        dates:
+          type: array
+          items:
+            type: string
+            format: date
+        amounts:
+          type: array
+          items:
+            type: number
+        order_counts:
+          type: array
+          items:
+            type: integer
+
+    ApiRecentLog:
+      type: object
+      properties:
+        request_id:
+          type: string
+        tenant_name:
+          type: string
+          nullable: true
+        method:
+          type: string
+        endpoint:
+          type: string
+        status_code:
+          type: integer
+        duration_ms:
+          type: integer
+        requested_at:
+          type: string
+          nullable: true
