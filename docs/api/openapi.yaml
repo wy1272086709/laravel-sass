@@ -739,6 +739,48 @@ components:
         created_at:
           type: string
           format: date-time
+        skus:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductSku'
+
+    ProductSku:
+      type: object
+      properties:
+        id:
+          type: integer
+        sku_code:
+          type: string
+        specs:
+          type: object
+          additionalProperties:
+            type: string
+        price:
+          type: number
+          format: double
+        stock:
+          type: integer
+
+    ProductSkuInput:
+      type: object
+      required: [sku_code, specs, price, stock]
+      properties:
+        id:
+          type: integer
+          description: 更新商品时传入；创建商品时省略
+        sku_code:
+          type: string
+        specs:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            type: string
+        price:
+          type: number
+          minimum: 0
+        stock:
+          type: integer
+          minimum: 0
 
     ProductCreate:
       type: object
@@ -756,6 +798,12 @@ components:
             type: string
         cover_image:
           type: string
+        skus:
+          type: array
+          minItems: 1
+          description: 传入后，商品价格取最低 SKU 价格，库存取 SKU 库存总和
+          items:
+            $ref: '#/components/schemas/ProductSkuInput'
 
     ProductUpdate:
       type: object
@@ -770,6 +818,11 @@ components:
           type: object
           additionalProperties:
             type: string
+        skus:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ProductSkuInput'
 
     Order:
       type: object
@@ -812,6 +865,9 @@ components:
       properties:
         product_name:
           type: string
+        sku_id:
+          type: integer
+          nullable: true
         spec_snapshot:
           type: object
           additionalProperties:
@@ -838,6 +894,10 @@ components:
             properties:
               product_id:
                 type: integer
+              sku_id:
+                type: integer
+                nullable: true
+                description: 多 SKU 商品必填
               quantity:
                 type: integer
                 minimum: 1

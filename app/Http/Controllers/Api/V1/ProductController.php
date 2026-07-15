@@ -10,6 +10,7 @@ use App\Http\Responses\ApiResponse;
 use App\Models\Product\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules\Enum;
 
 class ProductController extends Controller
@@ -35,6 +36,7 @@ class ProductController extends Controller
             })
             ->when($filters['price_min'] ?? null, fn ($query, mixed $price) => $query->where('price', '>=', $price))
             ->when($filters['price_max'] ?? null, fn ($query, mixed $price) => $query->where('price', '<=', $price))
+            ->with('skus')
             ->latest('id')
             ->paginate((int) ($filters['per_page'] ?? 20));
 
@@ -49,24 +51,38 @@ class ProductController extends Controller
             'stock' => ['required', 'integer', 'min:0'],
             'specs' => ['sometimes', 'array'],
             'cover_image' => ['sometimes', 'nullable', 'string', 'max:2048'],
+            'skus' => ['sometimes', 'array', 'min:1'],
+            'skus.*.sku_code' => ['required_with:skus', 'string', 'max:64', 'distinct'],
+            'skus.*.specs' => ['required_with:skus', 'array', 'min:1'],
+            'skus.*.price' => ['required_with:skus', 'numeric', 'min:0'],
+            'skus.*.stock' => ['required_with:skus', 'integer', 'min:0'],
         ]);
 
-        $product = Product::query()->create([
-            'product_code' => $this->nextProductCode(),
-            'name' => $data['name'],
-            'price' => $data['price'],
-            'stock' => $data['stock'],
-            'specs' => $data['specs'] ?? null,
-            'cover_image' => $data['cover_image'] ?? null,
-            'status' => ProductStatus::Listed,
-        ]);
+        $product = DB::transaction(function () use ($data): Product {
+            $skus = $data['skus'] ?? [];
+            $product = Product::query()->create([
+                'product_code' => $this->nextProductCode(),
+                'name' => $data['name'],
+                'price' => $skus === [] ? $data['price'] : collect($skus)->min('price'),
+                'stock' => $skus === [] ? $data['stock'] : collect($skus)->sum('stock'),
+                'specs' => $data['specs'] ?? null,
+                'cover_image' => $data['cover_image'] ?? null,
+                'status' => ProductStatus::Listed,
+            ]);
+
+            if ($skus !== []) {
+                $product->skus()->createMany($skus);
+            }
+
+            return $product->load('skus');
+        });
 
         return ApiResponse::ok($this->serializeProduct($product), 201);
     }
 
     public function show(int $product): JsonResponse
     {
-        return ApiResponse::ok($this->serializeProduct($this->findProduct($product)));
+        return ApiResponse::ok($this->serializeProduct($this->findProduct($product)->load('skus')));
     }
 
     public function update(Request $request, int $product): JsonResponse
@@ -77,12 +93,43 @@ class ProductController extends Controller
             'stock' => ['sometimes', 'integer', 'min:0'],
             'specs' => ['sometimes', 'array'],
             'cover_image' => ['sometimes', 'nullable', 'string', 'max:2048'],
+            'skus' => ['sometimes', 'array', 'min:1'],
+            'skus.*.id' => ['sometimes', 'integer'],
+            'skus.*.sku_code' => ['required_with:skus', 'string', 'max:64', 'distinct'],
+            'skus.*.specs' => ['required_with:skus', 'array', 'min:1'],
+            'skus.*.price' => ['required_with:skus', 'numeric', 'min:0'],
+            'skus.*.stock' => ['required_with:skus', 'integer', 'min:0'],
         ]);
 
         $product = $this->findProduct($product);
-        $product->update($data);
+        DB::transaction(function () use ($product, $data): void {
+            $skus = $data['skus'] ?? null;
+            unset($data['skus']);
 
-        return ApiResponse::ok($this->serializeProduct($product->refresh()));
+            if ($skus !== null) {
+                $keptIds = [];
+                foreach ($skus as $skuData) {
+                    $skuId = $skuData['id'] ?? null;
+                    unset($skuData['id']);
+
+                    if ($skuId !== null) {
+                        $sku = $product->skus()->findOrFail($skuId);
+                        $sku->update($skuData);
+                    } else {
+                        $sku = $product->skus()->create($skuData);
+                    }
+                    $keptIds[] = $sku->id;
+                }
+
+                $product->skus()->whereNotIn('id', $keptIds)->delete();
+                $data['price'] = collect($skus)->min('price');
+                $data['stock'] = collect($skus)->sum('stock');
+            }
+
+            $product->update($data);
+        });
+
+        return ApiResponse::ok($this->serializeProduct($product->refresh()->load('skus')));
     }
 
     public function status(Request $request, int $product): JsonResponse
@@ -125,6 +172,15 @@ class ProductController extends Controller
             'specs' => $product->specs,
             'status' => $product->status->value,
             'created_at' => $product->created_at?->toJSON(),
+            'skus' => $product->relationLoaded('skus')
+                ? $product->skus->map(fn ($sku): array => [
+                    'id' => $sku->id,
+                    'sku_code' => $sku->sku_code,
+                    'specs' => $sku->specs,
+                    'price' => (float) $sku->price,
+                    'stock' => $sku->stock,
+                ])->values()->all()
+                : [],
         ];
     }
 }

@@ -70,10 +70,47 @@ class ProductResource extends Resource
                         ->maxLength(255)
                         ->columnSpanFull(),
                     Forms\Components\KeyValue::make('specs')
-                        ->label('规格')
+                        ->label('默认规格')
                         ->keyLabel('规格名')
                         ->valueLabel('规格值')
                         ->columnSpanFull(),
+                ]),
+            Forms\Components\Section::make('SKU 规格')
+                ->description('添加 SKU 后，商品价格取最低 SKU 价格，库存取所有 SKU 库存总和。')
+                ->schema([
+                    Forms\Components\Repeater::make('skus')
+                        ->relationship()
+                        ->label('SKU 列表')
+                        ->defaultItems(0)
+                        ->columns(2)
+                        ->schema([
+                            Forms\Components\TextInput::make('sku_code')
+                                ->label('SKU 编码')
+                                ->required()
+                                ->distinct()
+                                ->maxLength(64),
+                            Forms\Components\TextInput::make('price')
+                                ->label('销售价')
+                                ->numeric()
+                                ->prefix('¥')
+                                ->minValue(0)
+                                ->required(),
+                            Forms\Components\TextInput::make('stock')
+                                ->label('库存')
+                                ->numeric()
+                                ->minValue(0)
+                                ->required()
+                                ->default(0),
+                            Forms\Components\KeyValue::make('specs')
+                                ->label('规格组合')
+                                ->keyLabel('规格名')
+                                ->valueLabel('规格值')
+                                ->required(),
+                        ])
+                        ->addActionLabel('添加 SKU')
+                        ->reorderable()
+                        ->collapsible()
+                        ->itemLabel(fn (array $state): ?string => $state['sku_code'] ?? null),
                 ]),
         ]);
     }

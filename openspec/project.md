@@ -27,10 +27,31 @@
 - 账单仅状态流转（A 方案），`payment_channel` 等字段为 C 预留，不对接支付渠道。
 - API 配额分级：基础版硬阻断；专业/企业版软告警+超额计费；150% 全局硬阻断。
 - Octane/Swoole 常驻下，静态/单例在请求间共享——所有请求级状态必须经 `forgetInstance` 清理。
-- 本期单 SKU 交互，`product_skus` 表预留；风控为 5 条轻量可配置规则。
+- 商品支持 SPU + 多 SKU 交互；风控为 5 条轻量可配置规则。
 
 ## 实现现状
 
-- ✅ 阶段 A 搭架子：Laravel 11 + Filament v3 双 Panel（`/platform`、`/merchant`）可登录、双 Guard、目录骨架、SQLite/predis 配置。
-- ✅ 阶段 1 基座：16 Enum、`TenantContext`/`TenantScope`/`BelongsToTenant`、5 Redis 工具、`QuotaPolicyService`、中间件链（Resolve/Apply/SqlGuard/RateLimit/Cleanup）、34 项 Pest 测试全绿。
-- ⏳ 阶段 2-7：迁移/模型、Filament CRUD、API 网关、队列/月结、Vue3 面板、压测/文档（延后）。
+当前已完成阶段 1-8 的 MVP 功能开发，进入本地环境验收和交付收口阶段。
+
+- ✅ 阶段 A（项目骨架）：Laravel 11 + Filament v3 双 Panel（`/platform`、`/merchant`）、双 Guard、统一登录和目录骨架已落地。
+- ✅ 阶段 1（架构基座）：16 个 Enum、`TenantContext` / `TenantScope` / `BelongsToTenant`、Redis 基础工具、配额策略和租户中间件链已实现。
+- ✅ 阶段 2（数据层）：26 个迁移文件、核心 Eloquent 模型、Factory、Seeder 和多租户自动过滤已实现；演示账号及基础经营数据可生成。
+- ✅ 阶段 3（双后台）：平台端商户、套餐、角色权限管理，以及商户端商品、订单、优惠券、API Key、账单和经营概览已实现；支持平台管理员 Impersonation。
+- ✅ 阶段 4（开放 API）：Access/Refresh Token、统一错误信封、Products、Orders、Bills、Dashboard、权限校验和分级配额限流已实现，统一前缀为 `/api/v1`。
+- ✅ 阶段 5（任务与业务闭环）：月结账单、对账差异、5 条风控规则、API 用量落库、订单关闭等核心 Job、调度注册及队列运维内部接口已实现。
+- ✅ 阶段 6（可视化）：平台仪表盘、API 监控、队列运维、风控对账 4 个 Vue3 + Echarts 面板及其内部 API、Filament 页面挂载已实现。
+- ✅ 阶段 7（测试与文档）：Smoke、Integration、限流 baseline 测试，以及对外/内部 OpenAPI、架构、数据库、本地压测和启动文档已补齐。
+- ✅ 阶段 8（封板后增强）：`benchmark:local-api` 本地 HTTP benchmark 命令、命令测试和压测设计文档已实现。
+
+## 当前验收状态
+
+- `pnpm build` 已通过；`panel-app` 产物约 630 KB，仍有 Vite 大 chunk 警告，后续可通过动态加载或 `manualChunks` 优化。
+- 2026-07-14 本机执行全量测试结果为 81 passed、39 failed。失败主要由本机 Redis 开启认证但测试环境未提供正确 `REDIS_PASSWORD` 导致（`NOAUTH Authentication required`），需要修正环境配置后重新全量验收。
+- 本机尚未安装 Swoole，因此 Octane 实机运行和长时间 HTTP 压测尚未完成；当前仅有 Pest baseline 和可复用的本地 benchmark 命令。
+- 当前定位为功能已铺齐的可演示 MVP；达到稳定交付状态前，还需完成 Redis 测试环境修复、全量测试转绿、Octane/Swoole 实测和前端包体优化。
+
+## 本期范围边界
+
+- 账单仅实现状态流转和支付字段预留，不对接真实支付渠道。
+- 商品支持后台及开放 API 多 SKU 维护，下单时记录 SKU 与规格快照并扣减 SKU 库存。
+- 风控为 5 条轻量可配置规则，不包含复杂实时风控平台能力。

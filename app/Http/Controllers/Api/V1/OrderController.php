@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
 use App\Models\Order\Order;
 use App\Models\Product\Product;
+use App\Models\Product\ProductSku;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -46,24 +47,50 @@ class OrderController extends Controller
             'buyer_phone' => ['required', 'string', 'max:50'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer'],
+            'items.*.sku_id' => ['sometimes', 'nullable', 'integer'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
         ]);
 
         $order = DB::transaction(function () use ($data, $context): Order {
             $products = Product::query()
                 ->whereIn('id', collect($data['items'])->pluck('product_id')->all())
+                ->lockForUpdate()
                 ->get()
                 ->keyBy('id');
+            $skuIds = collect($data['items'])->pluck('sku_id')->filter()->unique()->all();
+            $skus = ProductSku::query()
+                ->whereIn('id', $skuIds)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+            $remainingProductStock = $products->mapWithKeys(fn (Product $product): array => [$product->id => $product->stock])->all();
+            $remainingSkuStock = $skus->mapWithKeys(fn (ProductSku $sku): array => [$sku->id => $sku->stock])->all();
+            $resolvedItems = [];
+            $totalAmount = 0.0;
 
-            $totalAmount = collect($data['items'])->sum(function (array $item) use ($products): float {
+            foreach ($data['items'] as $item) {
                 /** @var Product|null $product */
                 $product = $products->get($item['product_id']);
-
                 abort_if($product === null, 404);
-                abort_if($product->stock < $item['quantity'], 422, 'Insufficient product stock');
+                $quantity = (int) $item['quantity'];
+                $sku = null;
 
-                return (float) $product->price * (int) $item['quantity'];
-            });
+                if (isset($item['sku_id'])) {
+                    /** @var ProductSku|null $sku */
+                    $sku = $skus->get($item['sku_id']);
+                    abort_if($sku === null || $sku->product_id !== $product->id, 404);
+                    abort_if($remainingSkuStock[$sku->id] < $quantity, 422, 'Insufficient SKU stock');
+                    $remainingSkuStock[$sku->id] -= $quantity;
+                } else {
+                    abort_if($product->skus()->exists(), 422, 'sku_id is required for multi-SKU products');
+                }
+
+                abort_if($remainingProductStock[$product->id] < $quantity, 422, 'Insufficient product stock');
+                $remainingProductStock[$product->id] -= $quantity;
+                $unitPrice = $sku?->price ?? $product->price;
+                $totalAmount += (float) $unitPrice * $quantity;
+                $resolvedItems[] = compact('product', 'sku', 'quantity', 'unitPrice');
+            }
 
             $order = Order::query()->create([
                 'tenant_id' => $context->tenantId,
@@ -74,21 +101,24 @@ class OrderController extends Controller
                 'status' => OrderStatus::PendingPayment,
             ]);
 
-            foreach ($data['items'] as $item) {
+            foreach ($resolvedItems as $item) {
                 /** @var Product $product */
-                $product = $products->get($item['product_id']);
-                $quantity = (int) $item['quantity'];
+                $product = $item['product'];
+                /** @var ProductSku|null $sku */
+                $sku = $item['sku'];
+                $quantity = $item['quantity'];
 
                 $order->items()->create([
                     'tenant_id' => $context->tenantId,
                     'product_id' => $product->id,
-                    'sku_id' => null,
+                    'sku_id' => $sku?->id,
                     'product_name' => $product->name,
-                    'spec_snapshot' => $product->specs ?? [],
-                    'unit_price' => $product->price,
+                    'spec_snapshot' => $sku?->specs ?? $product->specs ?? [],
+                    'unit_price' => $item['unitPrice'],
                     'quantity' => $quantity,
                 ]);
 
+                $sku?->decrement('stock', $quantity);
                 $product->decrement('stock', $quantity);
                 $product->increment('sales_count', $quantity);
             }
@@ -201,6 +231,7 @@ class OrderController extends Controller
             ...$this->serializeOrder($order),
             'items' => $order->items->map(fn ($item): array => [
                 'product_name' => $item->product_name,
+                'sku_id' => $item->sku_id,
                 'spec_snapshot' => $item->spec_snapshot,
                 'unit_price' => (float) $item->unit_price,
                 'quantity' => $item->quantity,

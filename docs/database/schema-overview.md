@@ -93,7 +93,9 @@ Schema::create('products', function (Blueprint $table) {
 });
 ```
 
-### product_skus (预留)
+### product_skus
+
+商户后台和开放 API 均支持维护多 SKU；商品主表的 `price` 为最低 SKU 价格，`stock` 为 SKU 库存汇总。
 
 ```php
 Schema::create('product_skus', function (Blueprint $table) {

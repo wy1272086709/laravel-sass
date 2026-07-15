@@ -5,6 +5,7 @@ use App\Domain\Enums\ProductStatus;
 use App\Models\Api\ApiKey;
 use App\Models\Platform\Package;
 use App\Models\Product\Product;
+use App\Models\Product\ProductSku;
 use App\Models\Tenant\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -88,6 +89,42 @@ it('rejects product writes without order_manage permission', function () {
             'message' => 'Missing required permission order_manage',
             'data' => null,
         ]);
+});
+
+it('creates and updates products with multiple skus and aggregated inventory', function () {
+    [$tenant, $token] = apiTokenForPermissions([ApiPermission::ProductQuery, ApiPermission::OrderManage]);
+
+    $created = $this->withToken($token)
+        ->postJson('/api/v1/products', [
+            'name' => 'Multi Color Shirt',
+            'price' => 0,
+            'stock' => 0,
+            'skus' => [
+                ['sku_code' => 'SHIRT-BLACK-M', 'specs' => ['color' => 'black', 'size' => 'M'], 'price' => 129, 'stock' => 8],
+                ['sku_code' => 'SHIRT-WHITE-L', 'specs' => ['color' => 'white', 'size' => 'L'], 'price' => 139, 'stock' => 5],
+            ],
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.price', 129)
+        ->assertJsonPath('data.stock', 13)
+        ->assertJsonCount(2, 'data.skus')
+        ->json('data');
+
+    $keptSku = $created['skus'][0];
+    $this->withToken($token)
+        ->putJson("/api/v1/products/{$created['id']}", [
+            'skus' => [
+                ['id' => $keptSku['id'], 'sku_code' => $keptSku['sku_code'], 'specs' => $keptSku['specs'], 'price' => 119, 'stock' => 6],
+                ['sku_code' => 'SHIRT-BLUE-S', 'specs' => ['color' => 'blue', 'size' => 'S'], 'price' => 149, 'stock' => 4],
+            ],
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.price', 119)
+        ->assertJsonPath('data.stock', 10)
+        ->assertJsonCount(2, 'data.skus');
+
+    expect(ProductSku::query()->where('product_id', $created['id'])->count())->toBe(2)
+        ->and(ProductSku::query()->where('product_id', $created['id'])->pluck('tenant_id')->unique()->all())->toBe([$tenant->id]);
 });
 
 /**

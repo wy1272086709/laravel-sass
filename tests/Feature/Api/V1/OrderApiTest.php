@@ -5,6 +5,7 @@ use App\Domain\Enums\OrderStatus;
 use App\Models\Order\Order;
 use App\Models\Order\OrderItem;
 use App\Models\Product\Product;
+use App\Models\Product\ProductSku;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -110,4 +111,50 @@ it('rejects order endpoints without order_manage permission', function () {
         ->getJson('/api/v1/orders')
         ->assertStatus(403)
         ->assertJsonPath('code', 40301);
+});
+
+it('creates orders for a selected sku and deducts sku and product inventory', function () {
+    [$tenant, $token] = apiTokenForPermissions([ApiPermission::OrderManage]);
+    $product = Product::factory()->forTenant($tenant)->create(['price' => 100, 'stock' => 12, 'sales_count' => 0]);
+    $sku = ProductSku::factory()->forProduct($product)->create([
+        'sku_code' => 'DESK-WHITE-120',
+        'specs' => ['color' => 'white', 'width' => '120cm'],
+        'price' => 360,
+        'stock' => 7,
+    ]);
+
+    $this->withToken($token)
+        ->postJson('/api/v1/orders', [
+            'buyer_name' => 'SKU Buyer',
+            'buyer_phone' => '13800138002',
+            'items' => [['product_id' => $product->id, 'sku_id' => $sku->id, 'quantity' => 2]],
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.total_amount', 720)
+        ->assertJsonPath('data.items.0.sku_id', $sku->id)
+        ->assertJsonPath('data.items.0.spec_snapshot.color', 'white');
+
+    expect($sku->refresh()->stock)->toBe(5)
+        ->and($product->refresh()->stock)->toBe(10)
+        ->and($product->sales_count)->toBe(2);
+});
+
+it('requires a valid tenant sku when ordering a multi-sku product', function () {
+    [$tenant, $token] = apiTokenForPermissions([ApiPermission::OrderManage]);
+    $product = Product::factory()->forTenant($tenant)->create(['stock' => 10]);
+    ProductSku::factory()->forProduct($product)->create(['stock' => 10]);
+    $otherSku = ProductSku::factory()->create();
+
+    $payload = [
+        'buyer_name' => 'Invalid SKU Buyer',
+        'buyer_phone' => '13800138003',
+        'items' => [['product_id' => $product->id, 'quantity' => 1]],
+    ];
+
+    $this->withToken($token)->postJson('/api/v1/orders', $payload)
+        ->assertStatus(422);
+
+    $payload['items'][0]['sku_id'] = $otherSku->id;
+    $this->withToken($token)->postJson('/api/v1/orders', $payload)
+        ->assertStatus(404);
 });

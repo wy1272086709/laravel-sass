@@ -19,4 +19,14 @@ class EditProduct extends EditRecord
             Actions\RestoreAction::make(),
         ];
     }
+
+    protected function afterSave(): void
+    {
+        if ($this->record->skus()->exists()) {
+            $this->record->update([
+                'price' => $this->record->skus()->min('price'),
+                'stock' => $this->record->skus()->sum('stock'),
+            ]);
+        }
+    }
 }

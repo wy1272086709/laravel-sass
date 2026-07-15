@@ -10,4 +10,19 @@ use Filament\Resources\Pages\CreateRecord;
 class CreateProduct extends CreateRecord
 {
     protected static string $resource = ProductResource::class;
+
+    protected function afterCreate(): void
+    {
+        $this->syncSkuSummary();
+    }
+
+    private function syncSkuSummary(): void
+    {
+        if ($this->record->skus()->exists()) {
+            $this->record->update([
+                'price' => $this->record->skus()->min('price'),
+                'stock' => $this->record->skus()->sum('stock'),
+            ]);
+        }
+    }
 }
