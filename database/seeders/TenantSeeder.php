@@ -120,6 +120,7 @@ class TenantSeeder extends Seeder
                     'tenant_id' => $tenant->id,
                     'name' => '演示 ERP',
                     'app_secret' => Hash::make('secret'),
+                    'signing_secret' => 'secret',
                     'permissions' => [
                         ApiPermission::ProductQuery->value,
                         ApiPermission::OrderManage->value,

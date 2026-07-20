@@ -27,6 +27,7 @@ class ApiKey extends Model
 
     protected $hidden = [
         'app_secret',
+        'signing_secret',
     ];
 
     protected function casts(): array
@@ -34,6 +35,7 @@ class ApiKey extends Model
         return [
             'permissions' => AsEnumArrayObject::class.':'.ApiPermission::class,
             'status' => ApiKeyStatus::class,
+            'signing_secret' => 'encrypted',
             'last_used_at' => 'datetime',
         ];
     }

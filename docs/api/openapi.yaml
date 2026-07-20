@@ -5,6 +5,8 @@ info:
     多商户 SaaS 电商开放中台对外 API 规范。
     - 统一前缀 `/api/v1`
     - 鉴权：`app_key` + `app_secret` 换取 `AccessToken`（Bearer）
+    - 敏感写接口额外要求 HMAC 请求签名：`X-App-Key` / `X-Timestamp` / `X-Nonce` / `X-Signature`
+    - 创建类/状态变更接口支持 `Idempotency-Key`，避免网络重试导致重复下单或重复操作
     - 与后台 Session Token 完全隔离
     - 平台后台内部面板接口另见 `docs/api/internal.yaml`
   version: 1.0.0
@@ -150,7 +152,13 @@ paths:
     post:
       tags: [Products]
       summary: 创建商品
-      description: 需要 `order_manage` 权限
+      description: 需要 `order_manage` 权限；要求 HMAC 签名和 Idempotency-Key
+      parameters:
+        - $ref: '#/components/parameters/SignatureAppKey'
+        - $ref: '#/components/parameters/SignatureTimestamp'
+        - $ref: '#/components/parameters/SignatureNonce'
+        - $ref: '#/components/parameters/SignatureValue'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -200,6 +208,10 @@ paths:
       summary: 更新商品
       parameters:
         - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/SignatureAppKey'
+        - $ref: '#/components/parameters/SignatureTimestamp'
+        - $ref: '#/components/parameters/SignatureNonce'
+        - $ref: '#/components/parameters/SignatureValue'
       requestBody:
         required: true
         content:
@@ -229,6 +241,10 @@ paths:
       summary: 上下架商品
       parameters:
         - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/SignatureAppKey'
+        - $ref: '#/components/parameters/SignatureTimestamp'
+        - $ref: '#/components/parameters/SignatureNonce'
+        - $ref: '#/components/parameters/SignatureValue'
       requestBody:
         required: true
         content:
@@ -298,6 +314,13 @@ paths:
     post:
       tags: [Orders]
       summary: 创建订单
+      description: 需要 HMAC 签名和 Idempotency-Key
+      parameters:
+        - $ref: '#/components/parameters/SignatureAppKey'
+        - $ref: '#/components/parameters/SignatureTimestamp'
+        - $ref: '#/components/parameters/SignatureNonce'
+        - $ref: '#/components/parameters/SignatureValue'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -344,6 +367,11 @@ paths:
       summary: 发货
       parameters:
         - $ref: '#/components/parameters/OrderNo'
+        - $ref: '#/components/parameters/SignatureAppKey'
+        - $ref: '#/components/parameters/SignatureTimestamp'
+        - $ref: '#/components/parameters/SignatureNonce'
+        - $ref: '#/components/parameters/SignatureValue'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         content:
           application/json:
@@ -376,6 +404,11 @@ paths:
       summary: 取消订单
       parameters:
         - $ref: '#/components/parameters/OrderNo'
+        - $ref: '#/components/parameters/SignatureAppKey'
+        - $ref: '#/components/parameters/SignatureTimestamp'
+        - $ref: '#/components/parameters/SignatureNonce'
+        - $ref: '#/components/parameters/SignatureValue'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         content:
           application/json:
@@ -398,6 +431,11 @@ paths:
       summary: 申请退款
       parameters:
         - $ref: '#/components/parameters/OrderNo'
+        - $ref: '#/components/parameters/SignatureAppKey'
+        - $ref: '#/components/parameters/SignatureTimestamp'
+        - $ref: '#/components/parameters/SignatureNonce'
+        - $ref: '#/components/parameters/SignatureValue'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -587,6 +625,45 @@ components:
       schema:
         type: string
         example: ORD202607020001
+    SignatureAppKey:
+      name: X-App-Key
+      in: header
+      required: true
+      schema:
+        type: string
+      description: 当前 AccessToken 对应的 App Key
+    SignatureTimestamp:
+      name: X-Timestamp
+      in: header
+      required: true
+      schema:
+        type: integer
+      description: Unix 秒级时间戳，允许 5 分钟时钟偏移
+    SignatureNonce:
+      name: X-Nonce
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+      description: 单次请求随机串，同一 API Key 在有效期内不可重复
+    SignatureValue:
+      name: X-Signature
+      in: header
+      required: true
+      schema:
+        type: string
+      description: HMAC-SHA256(method + path + query + timestamp + nonce + body_sha256)
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+      description: 租户维度的幂等键；同键同请求返回首次响应，同键不同请求返回 409
 
   responses:
     Unauthorized:

@@ -21,6 +21,7 @@ class ApiKeyFactory extends Factory
             'name' => $this->faker->word().' ERP',
             'app_key' => 'AK_'.$this->faker->unique()->numerify('########'),
             'app_secret' => Hash::make('secret'), // HASH 存储
+            'signing_secret' => 'secret', // encrypted cast
             'permissions' => [ApiPermission::ProductQuery, ApiPermission::OrderManage],
             'status' => ApiKeyStatus::Enabled,
             'last_used_at' => null,

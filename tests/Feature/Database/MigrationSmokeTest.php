@@ -30,6 +30,8 @@ it('migrates the phase 2 core tables and reserved billing fields', function () {
         'order_items',
         'coupons',
         'api_keys',
+        'api_signature_nonces',
+        'api_idempotency_keys',
         'api_request_logs',
         'api_usage_daily',
         'tenant_bills',
@@ -51,6 +53,10 @@ it('migrates the phase 2 core tables and reserved billing fields', function () {
         'external_transaction_no',
         'paid_at',
         'payment_meta',
+    ]))->toBeTrue();
+
+    expect(Schema::hasColumns('api_keys', [
+        'signing_secret',
     ]))->toBeTrue();
 });
 

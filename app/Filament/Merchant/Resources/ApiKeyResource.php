@@ -48,8 +48,11 @@ class ApiKeyResource extends Resource
                         ->revealable()
                         ->required(fn (string $operation): bool => $operation === 'create')
                         ->dehydrated(fn (?string $state): bool => filled($state))
+                        ->afterStateUpdated(fn (?string $state, Forms\Set $set): mixed => filled($state) ? $set('signing_secret', $state) : null)
                         ->dehydrateStateUsing(fn (string $state): string => Hash::make($state))
                         ->helperText('保存后不再展示明文；如需轮换，请输入新密钥。'),
+                    Forms\Components\Hidden::make('signing_secret')
+                        ->dehydrated(fn (?string $state): bool => filled($state)),
                     Forms\Components\Select::make('status')
                         ->label('状态')
                         ->options(self::statusOptions())

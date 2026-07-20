@@ -31,17 +31,26 @@ Route::prefix('v1')
             Route::get('/products/{product}', [ProductController::class, 'show']);
         });
 
-        Route::middleware(['api.auth:order_manage', 'api.rate'])->group(function () {
-            Route::post('/products', [ProductController::class, 'store']);
-            Route::put('/products/{product}', [ProductController::class, 'update']);
-            Route::patch('/products/{product}/status', [ProductController::class, 'status']);
+        Route::middleware(['api.auth:order_manage'])->group(function () {
+            Route::post('/products', [ProductController::class, 'store'])
+                ->middleware(['api.signature', 'api.idempotent', 'api.rate']);
+            Route::put('/products/{product}', [ProductController::class, 'update'])
+                ->middleware(['api.signature', 'api.rate']);
+            Route::patch('/products/{product}/status', [ProductController::class, 'status'])
+                ->middleware(['api.signature', 'api.rate']);
 
-            Route::get('/orders', [OrderController::class, 'index']);
-            Route::post('/orders', [OrderController::class, 'store']);
-            Route::get('/orders/{orderNo}', [OrderController::class, 'show']);
-            Route::post('/orders/{orderNo}/ship', [OrderController::class, 'ship']);
-            Route::post('/orders/{orderNo}/cancel', [OrderController::class, 'cancel']);
-            Route::post('/orders/{orderNo}/refund', [OrderController::class, 'refund']);
+            Route::get('/orders', [OrderController::class, 'index'])
+                ->middleware('api.rate');
+            Route::post('/orders', [OrderController::class, 'store'])
+                ->middleware(['api.signature', 'api.idempotent', 'api.rate']);
+            Route::get('/orders/{orderNo}', [OrderController::class, 'show'])
+                ->middleware('api.rate');
+            Route::post('/orders/{orderNo}/ship', [OrderController::class, 'ship'])
+                ->middleware(['api.signature', 'api.idempotent', 'api.rate']);
+            Route::post('/orders/{orderNo}/cancel', [OrderController::class, 'cancel'])
+                ->middleware(['api.signature', 'api.idempotent', 'api.rate']);
+            Route::post('/orders/{orderNo}/refund', [OrderController::class, 'refund'])
+                ->middleware(['api.signature', 'api.idempotent', 'api.rate']);
         });
 
         Route::middleware(['api.auth:bill_query', 'api.rate'])->group(function () {

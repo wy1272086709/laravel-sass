@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('app_key')->unique();             // AK_42819203
             $table->string('app_secret');                    // HASH 存储
+            $table->text('signing_secret')->nullable();      // 加密存储，用于 HMAC 请求签名
             $table->json('permissions');                     // ApiPermission[]
             $table->string('status')->default('enabled');    // ApiKeyStatus enum
             $table->timestamp('last_used_at')->nullable();

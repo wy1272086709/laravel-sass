@@ -43,22 +43,20 @@ it('shows product details and respects tenant isolation', function () {
 });
 
 it('creates updates and changes product status with order_manage permission', function () {
-    [, $token] = apiTokenForPermissions([ApiPermission::ProductQuery, ApiPermission::OrderManage]);
+    [, $token, $apiKey] = apiTokenForPermissions([ApiPermission::ProductQuery, ApiPermission::OrderManage]);
 
-    $created = $this->withToken($token)
-        ->postJson('/api/v1/products', [
+    $created = signedApiJson('POST', '/api/v1/products', $token, $apiKey, [
             'name' => 'Handmade Mug',
             'price' => 88.5,
             'stock' => 12,
             'specs' => ['color' => 'white'],
-        ])
+        ], 'product-create-001')
         ->assertCreated()
         ->assertJsonPath('data.name', 'Handmade Mug')
         ->assertJsonPath('data.status', ProductStatus::Listed->value)
         ->json('data');
 
-    $this->withToken($token)
-        ->putJson("/api/v1/products/{$created['id']}", [
+    signedApiJson('PUT', "/api/v1/products/{$created['id']}", $token, $apiKey, [
             'price' => 99,
             'stock' => 8,
         ])
@@ -66,8 +64,7 @@ it('creates updates and changes product status with order_manage permission', fu
         ->assertJsonPath('data.price', 99)
         ->assertJsonPath('data.stock', 8);
 
-    $this->withToken($token)
-        ->patchJson("/api/v1/products/{$created['id']}/status", [
+    signedApiJson('PATCH', "/api/v1/products/{$created['id']}/status", $token, $apiKey, [
             'status' => ProductStatus::Unlisted->value,
         ])
         ->assertOk()
@@ -75,14 +72,13 @@ it('creates updates and changes product status with order_manage permission', fu
 });
 
 it('rejects product writes without order_manage permission', function () {
-    [, $token] = apiTokenForPermissions([ApiPermission::ProductQuery]);
+    [, $token, $apiKey] = apiTokenForPermissions([ApiPermission::ProductQuery]);
 
-    $this->withToken($token)
-        ->postJson('/api/v1/products', [
+    signedApiJson('POST', '/api/v1/products', $token, $apiKey, [
             'name' => 'No Permission Product',
             'price' => 10,
             'stock' => 1,
-        ])
+        ], 'product-create-no-permission')
         ->assertStatus(403)
         ->assertExactJson([
             'code' => 40301,
@@ -92,10 +88,9 @@ it('rejects product writes without order_manage permission', function () {
 });
 
 it('creates and updates products with multiple skus and aggregated inventory', function () {
-    [$tenant, $token] = apiTokenForPermissions([ApiPermission::ProductQuery, ApiPermission::OrderManage]);
+    [$tenant, $token, $apiKey] = apiTokenForPermissions([ApiPermission::ProductQuery, ApiPermission::OrderManage]);
 
-    $created = $this->withToken($token)
-        ->postJson('/api/v1/products', [
+    $created = signedApiJson('POST', '/api/v1/products', $token, $apiKey, [
             'name' => 'Multi Color Shirt',
             'price' => 0,
             'stock' => 0,
@@ -103,7 +98,7 @@ it('creates and updates products with multiple skus and aggregated inventory', f
                 ['sku_code' => 'SHIRT-BLACK-M', 'specs' => ['color' => 'black', 'size' => 'M'], 'price' => 129, 'stock' => 8],
                 ['sku_code' => 'SHIRT-WHITE-L', 'specs' => ['color' => 'white', 'size' => 'L'], 'price' => 139, 'stock' => 5],
             ],
-        ])
+        ], 'product-create-skus')
         ->assertCreated()
         ->assertJsonPath('data.price', 129)
         ->assertJsonPath('data.stock', 13)
@@ -111,8 +106,7 @@ it('creates and updates products with multiple skus and aggregated inventory', f
         ->json('data');
 
     $keptSku = $created['skus'][0];
-    $this->withToken($token)
-        ->putJson("/api/v1/products/{$created['id']}", [
+    signedApiJson('PUT', "/api/v1/products/{$created['id']}", $token, $apiKey, [
             'skus' => [
                 ['id' => $keptSku['id'], 'sku_code' => $keptSku['sku_code'], 'specs' => $keptSku['specs'], 'price' => 119, 'stock' => 6],
                 ['sku_code' => 'SHIRT-BLUE-S', 'specs' => ['color' => 'blue', 'size' => 'S'], 'price' => 149, 'stock' => 4],
@@ -138,6 +132,7 @@ function apiTokenForPermissions(array $permissions): array
     $apiKey = ApiKey::factory()->forTenant($tenant)->create([
         'app_key' => 'AK_TEST_'.str()->random(8),
         'app_secret' => Hash::make('plain-secret'),
+        'signing_secret' => 'plain-secret',
         'permissions' => $permissions,
     ]);
 

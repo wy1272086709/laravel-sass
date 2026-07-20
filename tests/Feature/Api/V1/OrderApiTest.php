@@ -30,7 +30,7 @@ it('lists and shows orders for the authenticated tenant only', function () {
 });
 
 it('creates orders from tenant products and updates stock snapshots', function () {
-    [$tenant, $token] = apiTokenForPermissions([ApiPermission::OrderManage]);
+    [$tenant, $token, $apiKey] = apiTokenForPermissions([ApiPermission::OrderManage]);
     $product = Product::factory()->forTenant($tenant)->create([
         'name' => 'Standing Desk',
         'price' => 300,
@@ -39,14 +39,13 @@ it('creates orders from tenant products and updates stock snapshots', function (
         'specs' => ['color' => 'oak'],
     ]);
 
-    $response = $this->withToken($token)
-        ->postJson('/api/v1/orders', [
+    $response = signedApiJson('POST', '/api/v1/orders', $token, $apiKey, [
             'buyer_name' => 'Charlie',
             'buyer_phone' => '13800138000',
             'items' => [
                 ['product_id' => $product->id, 'quantity' => 2],
             ],
-        ])
+        ], 'order-create-charlie')
         ->assertCreated()
         ->assertJsonPath('data.buyer_name', 'Charlie')
         ->assertJsonPath('data.total_amount', 600)
@@ -60,46 +59,41 @@ it('creates orders from tenant products and updates stock snapshots', function (
 });
 
 it('rejects creating orders for products outside the api key tenant', function () {
-    [, $token] = apiTokenForPermissions([ApiPermission::OrderManage]);
+    [, $token, $apiKey] = apiTokenForPermissions([ApiPermission::OrderManage]);
     $otherProduct = Product::factory()->create();
 
-    $this->withToken($token)
-        ->postJson('/api/v1/orders', [
+    signedApiJson('POST', '/api/v1/orders', $token, $apiKey, [
             'buyer_name' => 'Dora',
             'buyer_phone' => '13800138001',
             'items' => [
                 ['product_id' => $otherProduct->id, 'quantity' => 1],
             ],
-        ])
+        ], 'order-create-other-tenant')
         ->assertStatus(404)
         ->assertJsonPath('code', 40401);
 });
 
 it('ships cancels and requests refunds through valid status transitions', function () {
-    [$tenant, $token] = apiTokenForPermissions([ApiPermission::OrderManage]);
+    [$tenant, $token, $apiKey] = apiTokenForPermissions([ApiPermission::OrderManage]);
     $paidOrder = Order::factory()->forTenant($tenant)->create(['status' => OrderStatus::Paid]);
     $pendingOrder = Order::factory()->forTenant($tenant)->create(['status' => OrderStatus::PendingPayment]);
     $completedOrder = Order::factory()->forTenant($tenant)->create(['status' => OrderStatus::Completed]);
 
-    $this->withToken($token)
-        ->postJson("/api/v1/orders/{$paidOrder->order_no}/ship", ['tracking_no' => 'SF123'])
+    signedApiJson('POST', "/api/v1/orders/{$paidOrder->order_no}/ship", $token, $apiKey, ['tracking_no' => 'SF123'], 'ship-paid-order')
         ->assertOk()
         ->assertJsonPath('data.status', OrderStatus::Shipped->value);
 
-    $this->withToken($token)
-        ->postJson("/api/v1/orders/{$pendingOrder->order_no}/cancel", ['reason' => 'buyer changed mind'])
+    signedApiJson('POST', "/api/v1/orders/{$pendingOrder->order_no}/cancel", $token, $apiKey, ['reason' => 'buyer changed mind'], 'cancel-pending-order')
         ->assertOk()
         ->assertJsonPath('data.status', OrderStatus::Cancelled->value);
 
     $refundOrder = Order::factory()->forTenant($tenant)->create(['status' => OrderStatus::Paid]);
 
-    $this->withToken($token)
-        ->postJson("/api/v1/orders/{$refundOrder->order_no}/refund", ['reason' => 'quality issue'])
+    signedApiJson('POST', "/api/v1/orders/{$refundOrder->order_no}/refund", $token, $apiKey, ['reason' => 'quality issue'], 'refund-paid-order')
         ->assertOk()
         ->assertJsonPath('data.status', OrderStatus::RefundRequested->value);
 
-    $this->withToken($token)
-        ->postJson("/api/v1/orders/{$completedOrder->order_no}/ship")
+    signedApiJson('POST', "/api/v1/orders/{$completedOrder->order_no}/ship", $token, $apiKey, [], 'ship-completed-order')
         ->assertStatus(409)
         ->assertJsonPath('code', 40901);
 });
@@ -114,7 +108,7 @@ it('rejects order endpoints without order_manage permission', function () {
 });
 
 it('creates orders for a selected sku and deducts sku and product inventory', function () {
-    [$tenant, $token] = apiTokenForPermissions([ApiPermission::OrderManage]);
+    [$tenant, $token, $apiKey] = apiTokenForPermissions([ApiPermission::OrderManage]);
     $product = Product::factory()->forTenant($tenant)->create(['price' => 100, 'stock' => 12, 'sales_count' => 0]);
     $sku = ProductSku::factory()->forProduct($product)->create([
         'sku_code' => 'DESK-WHITE-120',
@@ -123,12 +117,11 @@ it('creates orders for a selected sku and deducts sku and product inventory', fu
         'stock' => 7,
     ]);
 
-    $this->withToken($token)
-        ->postJson('/api/v1/orders', [
+    signedApiJson('POST', '/api/v1/orders', $token, $apiKey, [
             'buyer_name' => 'SKU Buyer',
             'buyer_phone' => '13800138002',
             'items' => [['product_id' => $product->id, 'sku_id' => $sku->id, 'quantity' => 2]],
-        ])
+        ], 'order-create-sku')
         ->assertCreated()
         ->assertJsonPath('data.total_amount', 720)
         ->assertJsonPath('data.items.0.sku_id', $sku->id)
@@ -140,7 +133,7 @@ it('creates orders for a selected sku and deducts sku and product inventory', fu
 });
 
 it('requires a valid tenant sku when ordering a multi-sku product', function () {
-    [$tenant, $token] = apiTokenForPermissions([ApiPermission::OrderManage]);
+    [$tenant, $token, $apiKey] = apiTokenForPermissions([ApiPermission::OrderManage]);
     $product = Product::factory()->forTenant($tenant)->create(['stock' => 10]);
     ProductSku::factory()->forProduct($product)->create(['stock' => 10]);
     $otherSku = ProductSku::factory()->create();
@@ -151,10 +144,10 @@ it('requires a valid tenant sku when ordering a multi-sku product', function () 
         'items' => [['product_id' => $product->id, 'quantity' => 1]],
     ];
 
-    $this->withToken($token)->postJson('/api/v1/orders', $payload)
+    signedApiJson('POST', '/api/v1/orders', $token, $apiKey, $payload, 'order-create-missing-sku')
         ->assertStatus(422);
 
     $payload['items'][0]['sku_id'] = $otherSku->id;
-    $this->withToken($token)->postJson('/api/v1/orders', $payload)
+    signedApiJson('POST', '/api/v1/orders', $token, $apiKey, $payload, 'order-create-invalid-sku')
         ->assertStatus(404);
 });

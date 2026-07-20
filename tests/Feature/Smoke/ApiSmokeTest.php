@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Hash;
 uses(RefreshDatabase::class);
 
 it('runs the public api smoke flow from auth to dashboard', function () {
-    [$tenant, $token] = stage7ApiSmokeToken([
+    [$tenant, $token, $apiKey] = stage7ApiSmokeToken([
         ApiPermission::ProductQuery,
         ApiPermission::OrderManage,
         ApiPermission::BillQuery,
@@ -43,14 +43,13 @@ it('runs the public api smoke flow from auth to dashboard', function () {
         ->assertJsonPath('code', 0)
         ->assertJsonPath('meta.total', 1);
 
-    $orderNo = $this->withToken($token)
-        ->postJson('/api/v1/orders', [
+    $orderNo = signedApiJson('POST', '/api/v1/orders', $token, $apiKey, [
             'buyer_name' => 'Stage Seven Buyer',
             'buyer_phone' => '13800138007',
             'items' => [
                 ['product_id' => $product->id, 'quantity' => 1],
             ],
-        ])
+        ], 'stage7-smoke-order')
         ->assertCreated()
         ->assertJsonPath('code', 0)
         ->json('data.order_no');
@@ -92,6 +91,7 @@ function stage7ApiSmokeToken(array $permissions): array
     $apiKey = ApiKey::factory()->forTenant($tenant)->create([
         'app_key' => 'AK_STAGE7_'.str()->random(8),
         'app_secret' => Hash::make('plain-secret'),
+        'signing_secret' => 'plain-secret',
         'permissions' => $permissions,
     ]);
 
