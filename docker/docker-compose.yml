@@ -1,0 +1,78 @@
+name: laravelproj
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: laravelproj-app
+    working_dir: /var/www/html
+    ports:
+      - "8080:8000"
+    volumes:
+      - ..:/var/www/html
+      - composer-cache:/home/laravel/.composer/cache
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8080
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: saas_platform
+      DB_USERNAME: saas
+      DB_PASSWORD: saas_secret
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      REDIS_CLIENT: predis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_secret
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "composer install &&
+             if [ ! -f .env ]; then cp .env.example .env && php artisan key:generate --force --no-interaction; fi &&
+             php artisan migrate --force &&
+             php -S 0.0.0.0:8000 -t public docker/router.php"
+
+  mysql:
+    image: mysql:8.0
+    container_name: laravelproj-mysql
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_DATABASE: saas_platform
+      MYSQL_USER: saas
+      MYSQL_PASSWORD: saas_secret
+      MYSQL_ROOT_PASSWORD: root_secret
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -proot_secret --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: laravelproj-redis
+    ports:
+      - "6380:6379"
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "redis_secret"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_secret", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql-data:
+  redis-data:
+  composer-cache:

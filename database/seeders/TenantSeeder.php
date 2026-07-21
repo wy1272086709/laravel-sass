@@ -79,24 +79,43 @@ class TenantSeeder extends Seeder
                 ],
             );
 
-            $products = Product::factory()
-                ->count(3)
-                ->forTenant($tenant)
-                ->sequence(
-                    ['name' => '轻量机械键盘', 'product_code' => 'G-'.$tenant->id.'001', 'price' => 299.00, 'stock' => 120],
-                    ['name' => '智能保温杯', 'product_code' => 'G-'.$tenant->id.'002', 'price' => 129.00, 'stock' => 240],
-                    ['name' => '无线降噪耳机', 'product_code' => 'G-'.$tenant->id.'003', 'price' => 499.00, 'stock' => 80],
-                )
-                ->create(['status' => ProductStatus::Listed]);
+            $products = collect([
+                ['name' => '轻量机械键盘', 'product_code' => 'G-'.$tenant->id.'001', 'price' => 299.00, 'stock' => 120, 'sales_count' => 494],
+                ['name' => '智能保温杯', 'product_code' => 'G-'.$tenant->id.'002', 'price' => 129.00, 'stock' => 240, 'sales_count' => 286],
+                ['name' => '无线降噪耳机', 'product_code' => 'G-'.$tenant->id.'003', 'price' => 499.00, 'stock' => 80, 'sales_count' => 168],
+            ])->map(fn (array $attributes): Product => Product::withTrashed()->updateOrCreate(
+                [
+                    'tenant_id' => $tenant->id,
+                    'product_code' => $attributes['product_code'],
+                ],
+                $attributes + [
+                    'tenant_id' => $tenant->id,
+                    'cover_image' => null,
+                    'specs' => ['颜色' => '默认'],
+                    'status' => ProductStatus::Listed,
+                    'deleted_at' => null,
+                ],
+            ));
 
-            $paidOrder = Order::factory()->forTenant($tenant)->create([
-                'order_no' => sprintf('ORD%s%04d', now()->format('Ymd'), $tenant->id),
-                'status' => OrderStatus::Paid,
-                'total_amount' => 598.00,
-                'paid_at' => now()->subDays(2),
-            ]);
+            $orderNo = sprintf('ORD%s%04d', now()->format('Ymd'), $tenant->id);
 
-            OrderItem::factory()->create([
+            $paidOrder = Order::query()->updateOrCreate(
+                ['order_no' => $orderNo],
+                [
+                    'tenant_id' => $tenant->id,
+                    'buyer_name' => '演示买家'.$tenant->id,
+                    'buyer_phone' => '1370000'.str_pad((string) $tenant->id, 4, '0', STR_PAD_LEFT),
+                    'status' => OrderStatus::Paid,
+                    'total_amount' => 598.00,
+                    'paid_at' => now()->subDays(2),
+                ],
+            );
+
+            OrderItem::query()->updateOrCreate([
+                'tenant_id' => $tenant->id,
+                'order_id' => $paidOrder->id,
+                'product_id' => $products->first()->id,
+            ], [
                 'tenant_id' => $tenant->id,
                 'order_id' => $paidOrder->id,
                 'product_id' => $products->first()->id,
@@ -106,13 +125,22 @@ class TenantSeeder extends Seeder
                 'spec_snapshot' => ['颜色' => '墨黑'],
             ]);
 
-            Coupon::factory()->forTenant($tenant)->create([
-                'name' => '新客满减券',
-                'type' => CouponType::FullReduction,
-                'status' => CouponStatus::Active,
-                'discount_value' => 20.00,
-                'min_amount' => 199.00,
-            ]);
+            Coupon::query()->updateOrCreate(
+                [
+                    'tenant_id' => $tenant->id,
+                    'name' => '新客满减券',
+                ],
+                [
+                    'type' => CouponType::FullReduction,
+                    'status' => CouponStatus::Active,
+                    'discount_value' => 20.00,
+                    'min_amount' => 199.00,
+                    'starts_at' => now()->subDay(),
+                    'ends_at' => now()->addDays(30),
+                    'usage_limit' => 200,
+                    'used_count' => 0,
+                ],
+            );
 
             ApiKey::query()->updateOrCreate(
                 ['app_key' => 'AK_DEMO_'.$tenant->merchant_code],
@@ -131,15 +159,20 @@ class TenantSeeder extends Seeder
                 ],
             );
 
-            TenantBill::factory()->forTenant($tenant)->create([
-                'billing_period' => now()->subMonthNoOverflow()->format('Y-m'),
-                'transaction_total' => 598.00,
-                'commission_amount' => 11.96,
-                'api_usage_fee' => 0,
-                'api_overage_fee' => 0,
-                'total_receivable' => 11.96,
-                'status' => BillStatus::PendingSettlement,
-            ]);
+            TenantBill::query()->updateOrCreate(
+                [
+                    'tenant_id' => $tenant->id,
+                    'billing_period' => now()->subMonthNoOverflow()->format('Y-m'),
+                ],
+                [
+                    'transaction_total' => 598.00,
+                    'commission_amount' => 11.96,
+                    'api_usage_fee' => 0,
+                    'api_overage_fee' => 0,
+                    'total_receivable' => 11.96,
+                    'status' => BillStatus::PendingSettlement,
+                ],
+            );
         }
     }
 }

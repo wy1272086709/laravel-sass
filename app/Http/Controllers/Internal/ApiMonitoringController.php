@@ -17,10 +17,16 @@ class ApiMonitoringController extends Controller
         $hours = collect(range(23, 0))
             ->map(fn (int $offset) => now()->subHours($offset)->startOfHour())
             ->values();
+        $driver = ApiRequestLog::query()->getConnection()->getDriverName();
+        $hourExpression = match ($driver) {
+            'mysql', 'mariadb' => "DATE_FORMAT(requested_at, '%Y-%m-%d %H:00')",
+            'pgsql' => "TO_CHAR(requested_at, 'YYYY-MM-DD HH24:00')",
+            default => "strftime('%Y-%m-%d %H:00', requested_at)",
+        };
 
         $logsByHour = ApiRequestLog::query()
             ->withoutGlobalScopes()
-            ->selectRaw("strftime('%Y-%m-%d %H:00', requested_at) as hour_key, COUNT(*) as total, SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as errors")
+            ->selectRaw($hourExpression.' as hour_key, COUNT(*) as total, SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as errors')
             ->where('requested_at', '>=', now()->subHours(23)->startOfHour())
             ->groupBy('hour_key')
             ->get()

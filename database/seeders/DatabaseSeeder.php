@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
             PackageSeeder::class,
             PlatformAdminSeeder::class,
             TenantSeeder::class,
+            OpsDemoSeeder::class,
         ]);
     }
 }
