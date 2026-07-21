@@ -2,10 +2,10 @@
     <section class="space-y-4">
         <div class="grid gap-4 xl:grid-cols-3">
             <div class="rounded-lg border border-gray-200 bg-white p-4 xl:col-span-2">
-                <v-chart class="h-80" :option="trendOption" autoresize />
+                <v-chart class="ops-chart" :option="trendOption" autoresize />
             </div>
             <div class="rounded-lg border border-gray-200 bg-white p-4">
-                <v-chart class="h-80" :option="levelOption" autoresize />
+                <v-chart class="ops-chart" :option="levelOption" autoresize />
             </div>
         </div>
 
@@ -50,3 +50,11 @@ const levelOption = computed(() => ({
     }],
 }));
 </script>
+
+<style scoped>
+.ops-chart {
+    width: 100%;
+    height: 20rem;
+    min-height: 20rem;
+}
+</style>
