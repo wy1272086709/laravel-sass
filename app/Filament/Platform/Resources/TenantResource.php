@@ -121,7 +121,11 @@ class TenantResource extends Resource
                     ->icon('heroicon-o-arrow-right-on-rectangle')
                     ->color('info')
                     ->requiresConfirmation()
-                    ->action(fn (Tenant $record) => app(ImpersonationController::class)->start(request(), $record)),
+                    ->action(function (Tenant $record) {
+                        app(ImpersonationController::class)->impersonate($record);
+
+                        return redirect('/merchant');
+                    }),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
                 Tables\Actions\RestoreAction::make(),

@@ -17,6 +17,13 @@ class ImpersonationController extends Controller
 {
     public function start(Request $request, Tenant $tenant): RedirectResponse
     {
+        $this->impersonate($tenant, $request->string('reason')->toString() ?: null);
+
+        return redirect('/merchant');
+    }
+
+    public function impersonate(Tenant $tenant, ?string $reason = null): void
+    {
         $platformUser = Auth::guard('platform')->user();
         abort_unless($platformUser !== null, 403);
 
@@ -32,18 +39,16 @@ class ImpersonationController extends Controller
             'platform_user_id' => $platformUser->id,
             'merchant_user_id' => $merchantUser->id,
             'started_at' => now(),
-            'reason' => $request->string('reason')->toString() ?: null,
+            'reason' => $reason,
         ]);
 
-        $request->session()->put('impersonated_by', $platformUser->id);
-        $request->session()->put('impersonation_log_id', $log->id);
+        session()->put('impersonated_by', $platformUser->id);
+        session()->put('impersonation_log_id', $log->id);
 
         app()->instance(
             TenantContext::class,
             new TenantContext($tenant->id, $platformUser->id, $tenant->package?->tier ?? PackageTier::Basic),
         );
-
-        return redirect('/merchant');
     }
 
     public function stop(Request $request): RedirectResponse

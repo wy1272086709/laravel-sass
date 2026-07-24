@@ -28,7 +28,6 @@ it('lets merchant users browse only their own products', function () {
     Product::factory()->forTenant($tenantB)->create(['name' => '其他商户商品']);
 
     actingAs($merchant, 'merchant');
-    app()->instance(TenantContext::class, new TenantContext($tenantA->id, null, PackageTier::Basic));
 
     $this->get(ProductResource::getUrl(panel: 'merchant'))
         ->assertOk()

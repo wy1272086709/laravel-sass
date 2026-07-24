@@ -1,6 +1,6 @@
 <x-filament-panels::page.simple>
     <x-slot name="subheading">
-        <div class="flex items-center justify-center gap-2">
+        <span class="flex items-center justify-center gap-2">
             <x-filament::button
                 :href="$this->getPanelSwitchUrl('platform')"
                 tag="a"
@@ -18,7 +18,7 @@
             >
                 商户用户
             </x-filament::button>
-        </div>
+        </span>
     </x-slot>
 
     {{ \Filament\Support\Facades\FilamentView::renderHook(\Filament\View\PanelsRenderHook::AUTH_LOGIN_FORM_BEFORE, scopes: $this->getRenderHookScopes()) }}

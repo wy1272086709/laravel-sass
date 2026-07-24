@@ -34,11 +34,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/up"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     command: >
       sh -c "composer install &&
              if [ ! -f .env ]; then cp .env.example .env && php artisan key:generate --force --no-interaction; fi &&
              php artisan migrate --force &&
-             php -S 0.0.0.0:8000 -t public docker/router.php"
+             exec php artisan octane:start --server=swoole --host=0.0.0.0 --port=8000"
 
   mysql:
     image: mysql:8.0

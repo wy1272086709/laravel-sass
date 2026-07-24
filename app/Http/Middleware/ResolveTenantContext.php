@@ -16,8 +16,6 @@ use Illuminate\Support\Facades\Auth;
  * - merchant guard 命中 → tenantId = merchant_users.tenant_id，套餐取自 tenant.package.tier；
  *   若 session 含 impersonated_by，则为 Impersonation 场景，记录 impersonatorId。
  * - platform guard / 未登录 → tenantId = null（平台全局视图，TenantScope 不附加 where）。
- *
- * 阶段 1：merchant_users 关系尚未落地，tier 暂回落 Basic；阶段 2 接 tenant.package.tier。
  */
 class ResolveTenantContext
 {
@@ -30,7 +28,8 @@ class ResolveTenantContext
         $merchantUser = Auth::guard('merchant')->user();
         if ($merchantUser !== null) {
             $tenantId = $merchantUser->tenant_id ?? null;
-            // 阶段 2：$tier = $merchantUser->tenant?->package?->tier ?? PackageTier::Basic;
+            $merchantUser->loadMissing('tenant.package');
+            $tier = $merchantUser->tenant?->package?->tier ?? PackageTier::Basic;
             $impersonatorId = session('impersonated_by');
         }
 

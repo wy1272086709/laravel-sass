@@ -4,8 +4,10 @@ use App\Filament\Platform\Resources\TenantResource;
 use App\Filament\Platform\Resources\TenantResource\Pages\CreateTenant;
 use App\Filament\Platform\Resources\TenantResource\Pages\EditTenant;
 use App\Filament\Platform\Resources\TenantResource\Pages\ListTenants;
+use App\Models\Merchant\MerchantUser;
 use App\Models\Platform\Package;
 use App\Models\Platform\PlatformUser;
+use App\Models\System\ImpersonationLog;
 use App\Models\Tenant\Tenant;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -68,4 +70,20 @@ it('creates and updates tenants through the resource forms', function () {
 it('registers the expected tenant resource pages', function () {
     expect(TenantResource::getPages())->toHaveKeys(['index', 'create', 'edit'])
         ->and(class_exists(ListTenants::class))->toBeTrue();
+});
+
+it('starts impersonation from the tenant table action', function () {
+    $platformUser = PlatformUser::factory()->create();
+    $tenant = Tenant::factory()->create();
+    $merchantUser = MerchantUser::factory()->forTenant($tenant)->create();
+
+    actingAs($platformUser, 'platform');
+
+    Livewire::test(ListTenants::class)
+        ->callTableAction('impersonate', $tenant)
+        ->assertRedirect('/merchant');
+
+    expect(auth()->guard('merchant')->id())->toBe($merchantUser->id)
+        ->and(session('impersonated_by'))->toBe($platformUser->id)
+        ->and(ImpersonationLog::query()->where('tenant_id', $tenant->id)->exists())->toBeTrue();
 });

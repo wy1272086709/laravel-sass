@@ -3,6 +3,10 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Pages\Auth\UnifiedLogin;
+use App\Http\Middleware\ApplyTenantGlobalScope;
+use App\Http\Middleware\ResolveTenantContext;
+use App\Infrastructure\Octane\OctaneTenantCleanupMiddleware;
+use App\Infrastructure\Octane\SqlTenantGuard;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -60,6 +64,10 @@ class PlatformPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
-            ]);
+                ResolveTenantContext::class,
+                ApplyTenantGlobalScope::class,
+                SqlTenantGuard::class,
+                OctaneTenantCleanupMiddleware::class,
+            ], isPersistent: true);
     }
 }
