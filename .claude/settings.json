@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(php -r ' *)"
+      "Bash(php -r ' *)",
+      "Bash(docker exec laravelproj-app php artisan tinker '--execute= *)",
+      "Bash(docker exec *)"
     ]
   }
 }

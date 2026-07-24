@@ -2,6 +2,7 @@
 
 use App\Domain\Enums\ApiPermission;
 use App\Domain\Enums\ProductStatus;
+use App\Jobs\InventoryAlertJob;
 use App\Models\Api\ApiKey;
 use App\Models\Platform\Package;
 use App\Models\Product\Product;
@@ -9,6 +10,7 @@ use App\Models\Product\ProductSku;
 use App\Models\Tenant\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Queue;
 
 uses(RefreshDatabase::class);
 
@@ -43,42 +45,46 @@ it('shows product details and respects tenant isolation', function () {
 });
 
 it('creates updates and changes product status with order_manage permission', function () {
-    [, $token, $apiKey] = apiTokenForPermissions([ApiPermission::ProductQuery, ApiPermission::OrderManage]);
+    Queue::fake();
+    [$tenant, $token, $apiKey] = apiTokenForPermissions([ApiPermission::ProductQuery, ApiPermission::OrderManage]);
 
     $created = signedApiJson('POST', '/api/v1/products', $token, $apiKey, [
-            'name' => 'Handmade Mug',
-            'price' => 88.5,
-            'stock' => 12,
-            'specs' => ['color' => 'white'],
-        ], 'product-create-001')
+        'name' => 'Handmade Mug',
+        'price' => 88.5,
+        'stock' => 12,
+        'specs' => ['color' => 'white'],
+    ], 'product-create-001')
         ->assertCreated()
         ->assertJsonPath('data.name', 'Handmade Mug')
         ->assertJsonPath('data.status', ProductStatus::Listed->value)
         ->json('data');
 
     signedApiJson('PUT', "/api/v1/products/{$created['id']}", $token, $apiKey, [
-            'price' => 99,
-            'stock' => 8,
-        ])
+        'price' => 99,
+        'stock' => 8,
+    ])
         ->assertOk()
         ->assertJsonPath('data.price', 99)
         ->assertJsonPath('data.stock', 8);
 
     signedApiJson('PATCH', "/api/v1/products/{$created['id']}/status", $token, $apiKey, [
-            'status' => ProductStatus::Unlisted->value,
-        ])
+        'status' => ProductStatus::Unlisted->value,
+    ])
         ->assertOk()
         ->assertJsonPath('data.status', ProductStatus::Unlisted->value);
+
+    Queue::assertPushed(InventoryAlertJob::class, fn (InventoryAlertJob $job): bool => $job->tenantId === $tenant->id);
+    Queue::assertPushed(InventoryAlertJob::class, 2);
 });
 
 it('rejects product writes without order_manage permission', function () {
     [, $token, $apiKey] = apiTokenForPermissions([ApiPermission::ProductQuery]);
 
     signedApiJson('POST', '/api/v1/products', $token, $apiKey, [
-            'name' => 'No Permission Product',
-            'price' => 10,
-            'stock' => 1,
-        ], 'product-create-no-permission')
+        'name' => 'No Permission Product',
+        'price' => 10,
+        'stock' => 1,
+    ], 'product-create-no-permission')
         ->assertStatus(403)
         ->assertExactJson([
             'code' => 40301,
@@ -91,14 +97,14 @@ it('creates and updates products with multiple skus and aggregated inventory', f
     [$tenant, $token, $apiKey] = apiTokenForPermissions([ApiPermission::ProductQuery, ApiPermission::OrderManage]);
 
     $created = signedApiJson('POST', '/api/v1/products', $token, $apiKey, [
-            'name' => 'Multi Color Shirt',
-            'price' => 0,
-            'stock' => 0,
-            'skus' => [
-                ['sku_code' => 'SHIRT-BLACK-M', 'specs' => ['color' => 'black', 'size' => 'M'], 'price' => 129, 'stock' => 8],
-                ['sku_code' => 'SHIRT-WHITE-L', 'specs' => ['color' => 'white', 'size' => 'L'], 'price' => 139, 'stock' => 5],
-            ],
-        ], 'product-create-skus')
+        'name' => 'Multi Color Shirt',
+        'price' => 0,
+        'stock' => 0,
+        'skus' => [
+            ['sku_code' => 'SHIRT-BLACK-M', 'specs' => ['color' => 'black', 'size' => 'M'], 'price' => 129, 'stock' => 8],
+            ['sku_code' => 'SHIRT-WHITE-L', 'specs' => ['color' => 'white', 'size' => 'L'], 'price' => 139, 'stock' => 5],
+        ],
+    ], 'product-create-skus')
         ->assertCreated()
         ->assertJsonPath('data.price', 129)
         ->assertJsonPath('data.stock', 13)
@@ -107,11 +113,11 @@ it('creates and updates products with multiple skus and aggregated inventory', f
 
     $keptSku = $created['skus'][0];
     signedApiJson('PUT', "/api/v1/products/{$created['id']}", $token, $apiKey, [
-            'skus' => [
-                ['id' => $keptSku['id'], 'sku_code' => $keptSku['sku_code'], 'specs' => $keptSku['specs'], 'price' => 119, 'stock' => 6],
-                ['sku_code' => 'SHIRT-BLUE-S', 'specs' => ['color' => 'blue', 'size' => 'S'], 'price' => 149, 'stock' => 4],
-            ],
-        ])
+        'skus' => [
+            ['id' => $keptSku['id'], 'sku_code' => $keptSku['sku_code'], 'specs' => $keptSku['specs'], 'price' => 119, 'stock' => 6],
+            ['sku_code' => 'SHIRT-BLUE-S', 'specs' => ['color' => 'blue', 'size' => 'S'], 'price' => 149, 'stock' => 4],
+        ],
+    ])
         ->assertOk()
         ->assertJsonPath('data.price', 119)
         ->assertJsonPath('data.stock', 10)

@@ -2,11 +2,15 @@
 
 use App\Domain\Enums\ApiPermission;
 use App\Domain\Enums\OrderStatus;
+use App\Jobs\CloseExpiredOrderJob;
+use App\Jobs\InventoryAlertJob;
+use App\Jobs\SyncLogisticsJob;
 use App\Models\Order\Order;
 use App\Models\Order\OrderItem;
 use App\Models\Product\Product;
 use App\Models\Product\ProductSku;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 
 uses(RefreshDatabase::class);
 
@@ -30,6 +34,7 @@ it('lists and shows orders for the authenticated tenant only', function () {
 });
 
 it('creates orders from tenant products and updates stock snapshots', function () {
+    Queue::fake();
     [$tenant, $token, $apiKey] = apiTokenForPermissions([ApiPermission::OrderManage]);
     $product = Product::factory()->forTenant($tenant)->create([
         'name' => 'Standing Desk',
@@ -40,12 +45,12 @@ it('creates orders from tenant products and updates stock snapshots', function (
     ]);
 
     $response = signedApiJson('POST', '/api/v1/orders', $token, $apiKey, [
-            'buyer_name' => 'Charlie',
-            'buyer_phone' => '13800138000',
-            'items' => [
-                ['product_id' => $product->id, 'quantity' => 2],
-            ],
-        ], 'order-create-charlie')
+        'buyer_name' => 'Charlie',
+        'buyer_phone' => '13800138000',
+        'items' => [
+            ['product_id' => $product->id, 'quantity' => 2],
+        ],
+    ], 'order-create-charlie')
         ->assertCreated()
         ->assertJsonPath('data.buyer_name', 'Charlie')
         ->assertJsonPath('data.total_amount', 600)
@@ -56,6 +61,10 @@ it('creates orders from tenant products and updates stock snapshots', function (
     expect($product->stock)->toBe(8)
         ->and($product->sales_count)->toBe(2)
         ->and(Order::query()->where('order_no', $response->json('data.order_no'))->exists())->toBeTrue();
+
+    $order = Order::query()->where('order_no', $response->json('data.order_no'))->firstOrFail();
+    Queue::assertPushed(CloseExpiredOrderJob::class, fn (CloseExpiredOrderJob $job): bool => $job->orderId === $order->id && $job->delay !== null);
+    Queue::assertPushed(InventoryAlertJob::class, fn (InventoryAlertJob $job): bool => $job->tenantId === $tenant->id);
 });
 
 it('rejects creating orders for products outside the api key tenant', function () {
@@ -63,17 +72,18 @@ it('rejects creating orders for products outside the api key tenant', function (
     $otherProduct = Product::factory()->create();
 
     signedApiJson('POST', '/api/v1/orders', $token, $apiKey, [
-            'buyer_name' => 'Dora',
-            'buyer_phone' => '13800138001',
-            'items' => [
-                ['product_id' => $otherProduct->id, 'quantity' => 1],
-            ],
-        ], 'order-create-other-tenant')
+        'buyer_name' => 'Dora',
+        'buyer_phone' => '13800138001',
+        'items' => [
+            ['product_id' => $otherProduct->id, 'quantity' => 1],
+        ],
+    ], 'order-create-other-tenant')
         ->assertStatus(404)
         ->assertJsonPath('code', 40401);
 });
 
 it('ships cancels and requests refunds through valid status transitions', function () {
+    Queue::fake();
     [$tenant, $token, $apiKey] = apiTokenForPermissions([ApiPermission::OrderManage]);
     $paidOrder = Order::factory()->forTenant($tenant)->create(['status' => OrderStatus::Paid]);
     $pendingOrder = Order::factory()->forTenant($tenant)->create(['status' => OrderStatus::PendingPayment]);
@@ -96,6 +106,9 @@ it('ships cancels and requests refunds through valid status transitions', functi
     signedApiJson('POST', "/api/v1/orders/{$completedOrder->order_no}/ship", $token, $apiKey, [], 'ship-completed-order')
         ->assertStatus(409)
         ->assertJsonPath('code', 40901);
+
+    Queue::assertPushed(SyncLogisticsJob::class, fn (SyncLogisticsJob $job): bool => $job->orderId === $paidOrder->id);
+    Queue::assertPushed(SyncLogisticsJob::class, 1);
 });
 
 it('rejects order endpoints without order_manage permission', function () {
@@ -118,10 +131,10 @@ it('creates orders for a selected sku and deducts sku and product inventory', fu
     ]);
 
     signedApiJson('POST', '/api/v1/orders', $token, $apiKey, [
-            'buyer_name' => 'SKU Buyer',
-            'buyer_phone' => '13800138002',
-            'items' => [['product_id' => $product->id, 'sku_id' => $sku->id, 'quantity' => 2]],
-        ], 'order-create-sku')
+        'buyer_name' => 'SKU Buyer',
+        'buyer_phone' => '13800138002',
+        'items' => [['product_id' => $product->id, 'sku_id' => $sku->id, 'quantity' => 2]],
+    ], 'order-create-sku')
         ->assertCreated()
         ->assertJsonPath('data.total_amount', 720)
         ->assertJsonPath('data.items.0.sku_id', $sku->id)

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
-use App\Domain\Enums\OrderStatus;
+use App\Domain\Order\OrderCancellationService;
 use App\Models\Order\Order;
 use App\Support\QueueJobLogger;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -19,23 +19,13 @@ class CloseExpiredOrderJob implements ShouldQueue
         public readonly int $orderId,
     ) {}
 
-    public function handle(QueueJobLogger $logger): void
+    public function handle(OrderCancellationService $cancellation, QueueJobLogger $logger): void
     {
         $order = Order::query()->withoutGlobalScopes()->findOrFail($this->orderId);
         $log = $logger->start(self::class, $order->tenant_id, ['order_id' => $order->id]);
 
         try {
-            $closed = false;
-
-            if ($order->status === OrderStatus::PendingPayment && $order->created_at?->lte(now()->subMinutes(30))) {
-                $order->forceFill([
-                    'status' => OrderStatus::Cancelled,
-                    'cancel_reason' => 'timeout_unpaid',
-                    'cancelled_at' => now(),
-                ])->save();
-
-                $closed = true;
-            }
+            $closed = $cancellation->cancel($order->id, 'timeout_unpaid', onlyIfExpired: true);
 
             $logger->success($log, [
                 'order_id' => $order->id,

@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Billing\BillSettlementService;
+use App\Domain\Enums\BillStatus;
 use App\Infrastructure\Redis\LuaDistributedLock;
 use App\Jobs\MonthlyBillingJob;
 use App\Models\Billing\TenantBill;
@@ -34,4 +35,19 @@ it('generates monthly bills for tenants and is idempotent', function () {
         ->and((float) TenantBill::query()->withoutGlobalScopes()->where('tenant_id', $tenantA->id)->first()->commission_amount)->toBe(20.0)
         ->and((float) TenantBill::query()->withoutGlobalScopes()->where('tenant_id', $tenantB->id)->first()->commission_amount)->toBe(60.0)
         ->and(QueueJobLog::query()->withoutGlobalScopes()->where('name', MonthlyBillingJob::class)->count())->toBe(4);
+});
+
+it('preserves a settled bill status when recalculating amounts', function () {
+    $tenant = Tenant::factory()->create(['commission_rate' => 0.0200]);
+    Order::factory()->forTenant($tenant)->create(['total_amount' => 1000, 'created_at' => '2026-06-10 10:00:00']);
+    $bill = TenantBill::factory()->forTenant($tenant)->create([
+        'billing_period' => '2026-06',
+        'status' => BillStatus::Settled,
+        'commission_amount' => 1,
+    ]);
+
+    app(BillSettlementService::class)->generateMonthlyBill($tenant->load('package'), '2026-06');
+
+    expect($bill->refresh()->status)->toBe(BillStatus::Settled)
+        ->and((float) $bill->commission_amount)->toBe(20.0);
 });

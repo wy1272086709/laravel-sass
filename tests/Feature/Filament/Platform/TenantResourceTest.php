@@ -4,6 +4,8 @@ use App\Filament\Platform\Resources\TenantResource;
 use App\Filament\Platform\Resources\TenantResource\Pages\CreateTenant;
 use App\Filament\Platform\Resources\TenantResource\Pages\EditTenant;
 use App\Filament\Platform\Resources\TenantResource\Pages\ListTenants;
+use App\Jobs\GenerateApiBillJob;
+use App\Jobs\MerchantWelcomeEmailJob;
 use App\Models\Merchant\MerchantUser;
 use App\Models\Platform\Package;
 use App\Models\Platform\PlatformUser;
@@ -11,6 +13,7 @@ use App\Models\System\ImpersonationLog;
 use App\Models\Tenant\Tenant;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Livewire\Livewire;
 
 use function Pest\Laravel\actingAs;
@@ -36,6 +39,7 @@ it('lets platform users browse tenant management pages', function () {
 });
 
 it('creates and updates tenants through the resource forms', function () {
+    Bus::fake([MerchantWelcomeEmailJob::class]);
     $user = PlatformUser::factory()->create();
     $package = Package::factory()->create(['name' => '测试套餐']);
 
@@ -65,6 +69,7 @@ it('creates and updates tenants through the resource forms', function () {
         ->assertHasNoFormErrors();
 
     expect($tenant->refresh()->name)->toBe('Filament 商户更新');
+    Bus::assertDispatched(MerchantWelcomeEmailJob::class, fn (MerchantWelcomeEmailJob $job): bool => $job->tenantId === $tenant->id);
 });
 
 it('registers the expected tenant resource pages', function () {
@@ -86,4 +91,18 @@ it('starts impersonation from the tenant table action', function () {
     expect(auth()->guard('merchant')->id())->toBe($merchantUser->id)
         ->and(session('impersonated_by'))->toBe($platformUser->id)
         ->and(ImpersonationLog::query()->where('tenant_id', $tenant->id)->exists())->toBeTrue();
+});
+
+it('queues bill generation for a selected tenant and period', function () {
+    Bus::fake([GenerateApiBillJob::class]);
+    $platformUser = PlatformUser::factory()->create();
+    $tenant = Tenant::factory()->create();
+
+    actingAs($platformUser, 'platform');
+
+    Livewire::test(ListTenants::class)
+        ->callTableAction('generateApiBill', $tenant, data: ['period' => '2026-06'])
+        ->assertHasNoTableActionErrors();
+
+    Bus::assertDispatched(GenerateApiBillJob::class, fn (GenerateApiBillJob $job): bool => $job->tenantId === $tenant->id && $job->period === '2026-06');
 });

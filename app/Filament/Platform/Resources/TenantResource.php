@@ -7,9 +7,11 @@ namespace App\Filament\Platform\Resources;
 use App\Domain\Enums\TenantStatus;
 use App\Filament\Platform\Resources\TenantResource\Pages;
 use App\Http\Controllers\ImpersonationController;
+use App\Jobs\GenerateApiBillJob;
 use App\Models\Tenant\Tenant;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -116,6 +118,27 @@ class TenantResource extends Resource
                 Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
+                Tables\Actions\Action::make('generateApiBill')
+                    ->label('生成账单')
+                    ->icon('heroicon-o-document-currency-yen')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->form([
+                        Forms\Components\TextInput::make('period')
+                            ->label('账期')
+                            ->placeholder('YYYY-MM')
+                            ->default(now()->subMonthNoOverflow()->format('Y-m'))
+                            ->regex('/^\d{4}-(0[1-9]|1[0-2])$/')
+                            ->required(),
+                    ])
+                    ->action(function (Tenant $record, array $data): void {
+                        GenerateApiBillJob::dispatch($record->id, $data['period'])->afterCommit();
+
+                        Notification::make()
+                            ->title('账单生成任务已提交')
+                            ->success()
+                            ->send();
+                    }),
                 Tables\Actions\Action::make('impersonate')
                     ->label('进入商户后台')
                     ->icon('heroicon-o-arrow-right-on-rectangle')

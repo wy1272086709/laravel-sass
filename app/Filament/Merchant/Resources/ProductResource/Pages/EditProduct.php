@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Merchant\Resources\ProductResource\Pages;
 
 use App\Filament\Merchant\Resources\ProductResource;
+use App\Jobs\InventoryAlertJob;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
 
@@ -28,5 +29,7 @@ class EditProduct extends EditRecord
                 'stock' => $this->record->skus()->sum('stock'),
             ]);
         }
+
+        InventoryAlertJob::dispatch($this->record->tenant_id)->afterCommit();
     }
 }

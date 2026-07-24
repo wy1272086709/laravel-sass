@@ -4,12 +4,14 @@ use App\Domain\Enums\PackageTier;
 use App\Domain\Tenant\TenantContext;
 use App\Filament\Merchant\Resources\ProductResource;
 use App\Filament\Merchant\Resources\ProductResource\Pages\CreateProduct;
+use App\Jobs\InventoryAlertJob;
 use App\Models\Merchant\MerchantUser;
 use App\Models\Product\Product;
 use App\Models\Product\ProductSku;
 use App\Models\Tenant\Tenant;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Livewire\Livewire;
 
 use function Pest\Laravel\actingAs;
@@ -36,6 +38,7 @@ it('lets merchant users browse only their own products', function () {
 });
 
 it('creates products with the current tenant context', function () {
+    Bus::fake([InventoryAlertJob::class]);
     $tenant = Tenant::factory()->create();
     $merchant = MerchantUser::factory()->forTenant($tenant)->create();
 
@@ -58,9 +61,11 @@ it('creates products with the current tenant context', function () {
     $product = Product::query()->where('product_code', 'G-FILAMENT-001')->firstOrFail();
 
     expect($product->tenant_id)->toBe($tenant->id);
+    Bus::assertDispatched(InventoryAlertJob::class, fn (InventoryAlertJob $job): bool => $job->tenantId === $tenant->id);
 });
 
 it('creates product skus and aggregates price and stock', function () {
+    Bus::fake([InventoryAlertJob::class]);
     $tenant = Tenant::factory()->create();
     $merchant = MerchantUser::factory()->forTenant($tenant)->create();
 

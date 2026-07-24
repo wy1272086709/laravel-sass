@@ -2,17 +2,18 @@ name: laravelproj
 
 services:
   app:
-    build:
+    build: &app-build
       context: ..
       dockerfile: docker/Dockerfile
+    image: laravelproj-app:local
     container_name: laravelproj-app
     working_dir: /var/www/html
     ports:
       - "8080:8000"
-    volumes:
+    volumes: &app-volumes
       - ..:/var/www/html
       - composer-cache:/home/laravel/.composer/cache
-    environment:
+    environment: &app-environment
       APP_ENV: local
       APP_DEBUG: "true"
       APP_URL: http://localhost:8080
@@ -45,6 +46,32 @@ services:
              if [ ! -f .env ]; then cp .env.example .env && php artisan key:generate --force --no-interaction; fi &&
              php artisan migrate --force &&
              exec php artisan octane:start --server=swoole --host=0.0.0.0 --port=8000"
+
+  queue-worker:
+    build: *app-build
+    image: laravelproj-app:local
+    container_name: laravelproj-queue-worker
+    working_dir: /var/www/html
+    volumes: *app-volumes
+    environment: *app-environment
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    command: php artisan queue:work redis --sleep=1 --tries=3 --timeout=60
+
+  scheduler:
+    build: *app-build
+    image: laravelproj-app:local
+    container_name: laravelproj-scheduler
+    working_dir: /var/www/html
+    volumes: *app-volumes
+    environment: *app-environment
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    command: php artisan schedule:work
 
   mysql:
     image: mysql:8.0

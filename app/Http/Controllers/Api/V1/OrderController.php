@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1;
 
 use App\Domain\Enums\OrderStatus;
+use App\Domain\Order\OrderCancellationService;
 use App\Domain\Tenant\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
+use App\Jobs\CloseExpiredOrderJob;
+use App\Jobs\InventoryAlertJob;
+use App\Jobs\SyncLogisticsJob;
 use App\Models\Order\Order;
 use App\Models\Product\Product;
 use App\Models\Product\ProductSku;
@@ -126,6 +130,9 @@ class OrderController extends Controller
             return $order->load('items');
         });
 
+        CloseExpiredOrderJob::dispatch($order->id)->delay(now()->addMinutes(30));
+        InventoryAlertJob::dispatch($order->tenant_id);
+
         return ApiResponse::ok($this->serializeOrderDetail($order), 201);
     }
 
@@ -152,10 +159,12 @@ class OrderController extends Controller
             'shipped_at' => now(),
         ]);
 
+        SyncLogisticsJob::dispatch($order->id);
+
         return ApiResponse::ok($this->serializeOrderDetail($order->refresh()->load('items')));
     }
 
-    public function cancel(Request $request, string $orderNo): JsonResponse
+    public function cancel(Request $request, string $orderNo, OrderCancellationService $cancellation): JsonResponse
     {
         $data = $request->validate([
             'reason' => ['sometimes', 'nullable', 'string', 'max:255'],
@@ -163,15 +172,9 @@ class OrderController extends Controller
 
         $order = $this->findOrder($orderNo);
 
-        if (! $order->status->canTransitionTo(OrderStatus::Cancelled)) {
+        if (! $cancellation->cancel($order->id, $data['reason'] ?? null)) {
             return ApiResponse::error(40901, 'Order status does not allow cancellation', 409);
         }
-
-        $order->update([
-            'status' => OrderStatus::Cancelled,
-            'cancel_reason' => $data['reason'] ?? null,
-            'cancelled_at' => now(),
-        ]);
 
         return ApiResponse::ok($this->serializeOrderDetail($order->refresh()->load('items')));
     }

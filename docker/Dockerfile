@@ -11,9 +11,10 @@ RUN apt-get update \
         git \
         libicu-dev \
         libssl-dev \
+        libsqlite3-dev \
         libzip-dev \
         unzip \
-    && docker-php-ext-install -j"$(nproc)" bcmath intl pcntl pdo_mysql zip \
+    && docker-php-ext-install -j"$(nproc)" bcmath intl pcntl pdo_mysql pdo_sqlite zip \
     && export MAKEFLAGS="-j$(nproc)" \
     && yes no | pecl install swoole \
     && docker-php-ext-enable swoole \

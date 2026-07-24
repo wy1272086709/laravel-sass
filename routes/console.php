@@ -12,5 +12,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::job(new MonthlyBillingJob)->monthlyOn(1, '02:00');
-Schedule::job(new ApiUsageFlushJob(now()->subDay()->toDateString()))->dailyAt('00:05');
+Schedule::job(new ApiUsageFlushJob)->dailyAt('00:05');
 Schedule::job(new RiskRuleScanJob)->hourly();

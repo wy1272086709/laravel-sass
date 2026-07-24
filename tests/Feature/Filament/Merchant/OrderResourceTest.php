@@ -4,11 +4,13 @@ use App\Domain\Enums\PackageTier;
 use App\Domain\Tenant\TenantContext;
 use App\Filament\Merchant\Resources\OrderResource;
 use App\Filament\Merchant\Resources\OrderResource\Pages\CreateOrder;
+use App\Jobs\CloseExpiredOrderJob;
 use App\Models\Merchant\MerchantUser;
 use App\Models\Order\Order;
 use App\Models\Tenant\Tenant;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Livewire\Livewire;
 
 use function Pest\Laravel\actingAs;
@@ -36,6 +38,7 @@ it('lets merchant users browse only their own orders', function () {
 });
 
 it('creates orders with the current tenant context', function () {
+    Bus::fake([CloseExpiredOrderJob::class]);
     $tenant = Tenant::factory()->create();
     $merchant = MerchantUser::factory()->forTenant($tenant)->create();
 
@@ -56,4 +59,5 @@ it('creates orders with the current tenant context', function () {
     $order = Order::query()->where('order_no', 'ORD-FILAMENT-001')->firstOrFail();
 
     expect($order->tenant_id)->toBe($tenant->id);
+    Bus::assertDispatched(CloseExpiredOrderJob::class, fn (CloseExpiredOrderJob $job): bool => $job->orderId === $order->id && $job->delay !== null);
 });

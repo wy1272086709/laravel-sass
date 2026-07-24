@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Domain\Enums\ProductStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
+use App\Jobs\InventoryAlertJob;
 use App\Models\Product\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -77,6 +78,8 @@ class ProductController extends Controller
             return $product->load('skus');
         });
 
+        InventoryAlertJob::dispatch($product->tenant_id);
+
         return ApiResponse::ok($this->serializeProduct($product), 201);
     }
 
@@ -128,6 +131,8 @@ class ProductController extends Controller
 
             $product->update($data);
         });
+
+        InventoryAlertJob::dispatch($product->tenant_id);
 
         return ApiResponse::ok($this->serializeProduct($product->refresh()->load('skus')));
     }

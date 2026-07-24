@@ -38,22 +38,28 @@ final class BillSettlementService
         $api = $this->apiFees($tenant, $period, $start->daysInMonth);
         $totalReceivable = $this->money($commissionAmount + $api['api_usage_fee'] + $api['api_overage_fee']);
 
-        return TenantBill::query()
+        $bill = TenantBill::query()
             ->withoutGlobalScopes()
-            ->updateOrCreate(
-                [
-                    'tenant_id' => $tenant->id,
-                    'billing_period' => $period,
-                ],
-                [
-                    'transaction_total' => $transactionTotal,
-                    'commission_amount' => $commissionAmount,
-                    'api_usage_fee' => $api['api_usage_fee'],
-                    'api_overage_fee' => $api['api_overage_fee'],
-                    'total_receivable' => $totalReceivable,
-                    'status' => BillStatus::PendingSettlement,
-                ],
-            );
+            ->firstOrNew([
+                'tenant_id' => $tenant->id,
+                'billing_period' => $period,
+            ]);
+
+        $bill->fill([
+            'transaction_total' => $transactionTotal,
+            'commission_amount' => $commissionAmount,
+            'api_usage_fee' => $api['api_usage_fee'],
+            'api_overage_fee' => $api['api_overage_fee'],
+            'total_receivable' => $totalReceivable,
+        ]);
+
+        if (! $bill->exists) {
+            $bill->status = BillStatus::PendingSettlement;
+        }
+
+        $bill->save();
+
+        return $bill;
     }
 
     public function recordMerchantReport(TenantBill $bill, float|int|string $reportedAmount): TenantBill
