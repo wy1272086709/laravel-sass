@@ -2,6 +2,9 @@ FROM php:8.4-cli-bookworm
 
 WORKDIR /var/www/html
 
+# Pin swoole 版本以保证镜像可复现（6.2.2 支持 PHP 8.4；升级前到 pecl.php.net/package/swoole 确认最新稳定版）
+ARG SWOOLE_VERSION=6.2.2
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         $PHPIZE_DEPS \
@@ -16,7 +19,7 @@ RUN apt-get update \
         unzip \
     && docker-php-ext-install -j"$(nproc)" bcmath intl pcntl pdo_mysql pdo_sqlite zip \
     && export MAKEFLAGS="-j$(nproc)" \
-    && yes no | pecl install swoole \
+    && yes no | pecl install swoole-${SWOOLE_VERSION} \
     && docker-php-ext-enable swoole \
     && apt-get purge -y --auto-remove $PHPIZE_DEPS libssl-dev \
     && apt-get clean \
@@ -25,6 +28,8 @@ RUN apt-get update \
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 RUN useradd -ms /bin/bash laravel
+
+EXPOSE 8000
 
 USER laravel
 

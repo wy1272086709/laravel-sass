@@ -30,6 +30,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: redis_secret
+      OCTANE_WORKERS: ${OCTANE_WORKERS:-auto}
+      OCTANE_MAX_REQUESTS: ${OCTANE_MAX_REQUESTS:-1000}
     depends_on:
       mysql:
         condition: service_healthy
