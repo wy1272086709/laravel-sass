@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Enums\OperationAction;
+use App\Models\Api\ApiKey;
 use App\Models\System\OperationLog;
 use App\Models\Tenant\Tenant;
 use App\Support\OperationLogContext;
@@ -11,12 +12,13 @@ uses(RefreshDatabase::class);
 
 it('maps the api_key actor kind to the api_key_id column', function () {
     $tenant = Tenant::factory()->create();
+    $apiKey = ApiKey::factory()->forTenant($tenant)->create();
 
     app(OperationLogger::class)->log(new OperationLogContext(
         tenantId: $tenant->id,
         actorKind: 'api_key',
-        actorId: 99,
-        actorLabel: 'ApiKey:99',
+        actorId: $apiKey->id,
+        actorLabel: 'ApiKey:'.$apiKey->id,
         subjectType: 'order',
         subjectId: 123,
         subjectLabel: 'ORD20260726X',
@@ -33,7 +35,7 @@ it('maps the api_key actor kind to the api_key_id column', function () {
     expect($row)->not->toBeNull()
         ->and($row->tenant_id)->toBe($tenant->id)
         ->and($row->actor_kind)->toBe('api_key')
-        ->and($row->api_key_id)->toBe(99)
+        ->and($row->api_key_id)->toBe($apiKey->id)
         ->and($row->merchant_user_id)->toBeNull()
         ->and($row->platform_user_id)->toBeNull()
         ->and($row->action)->toBe(OperationAction::Created)
