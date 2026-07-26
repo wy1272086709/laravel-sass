@@ -16,6 +16,7 @@ use App\Models\Platform\Package;
 use App\Models\Product\Product;
 use App\Models\Risk\RiskAlert;
 use App\Models\System\ImpersonationLog;
+use App\Models\System\OperationLog;
 use App\Models\System\PackageChangeLog;
 use App\Models\System\QueueJobLog;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -128,5 +129,11 @@ class Tenant extends Model
     public function packageChangeLogs(): HasMany
     {
         return $this->hasMany(PackageChangeLog::class);
+    }
+
+    /** @return HasMany<OperationLog> */
+    public function operationLogs(): HasMany
+    {
+        return $this->hasMany(OperationLog::class);
     }
 }

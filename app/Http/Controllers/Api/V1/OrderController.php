@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Enums\OperationAction;
 use App\Domain\Enums\OrderStatus;
 use App\Domain\Order\OrderCancellationService;
 use App\Domain\Tenant\TenantContext;
@@ -12,9 +13,13 @@ use App\Http\Responses\ApiResponse;
 use App\Jobs\CloseExpiredOrderJob;
 use App\Jobs\InventoryAlertJob;
 use App\Jobs\SyncLogisticsJob;
+use App\Models\Api\ApiKey;
 use App\Models\Order\Order;
 use App\Models\Product\Product;
 use App\Models\Product\ProductSku;
+use App\Support\OperationActor;
+use App\Support\OperationLogContext;
+use App\Support\OperationLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,13 +27,17 @@ use Illuminate\Validation\Rules\Enum;
 
 class OrderController extends Controller
 {
+    public function __construct(
+        private readonly OperationLogger $auditLogger,
+    ) {}
+
     public function index(Request $request): JsonResponse
     {
         $filters = $request->validate([
-            'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'page' => ['sometimes', 'integer', 'min' => 1],
+            'per_page' => ['sometimes', 'integer', 'min' => 1, 'max' => 100],
             'status' => ['sometimes', new Enum(OrderStatus::class)],
-            'order_no' => ['sometimes', 'string', 'max:64'],
+            'order_no' => ['sometimes', 'string', 'max' => 64],
             'date_from' => ['sometimes', 'date'],
             'date_to' => ['sometimes', 'date', 'after_or_equal:date_from'],
         ]);
@@ -55,7 +64,7 @@ class OrderController extends Controller
             'items.*.quantity' => ['required', 'integer', 'min:1'],
         ]);
 
-        $order = DB::transaction(function () use ($data, $context): Order {
+        $order = DB::transaction(function () use ($data, $context, $request): Order {
             $products = Product::query()
                 ->whereIn('id', collect($data['items'])->pluck('product_id')->all())
                 ->lockForUpdate()
@@ -127,7 +136,19 @@ class OrderController extends Controller
                 $product->increment('sales_count', $quantity);
             }
 
-            return $order->load('items');
+            $order->load('items');
+
+            // 审计：与扣库存同事务原子提交
+            $this->auditLogger->log($this->buildContext(
+                $request,
+                $order,
+                OperationAction::Created,
+                null,
+                OrderStatus::PendingPayment->value,
+                ['items_count' => $order->items->count(), 'total_amount' => (float) $order->total_amount],
+            ));
+
+            return $order;
         });
 
         CloseExpiredOrderJob::dispatch($order->id)->delay(now()->addMinutes(30));
@@ -146,7 +167,7 @@ class OrderController extends Controller
         return ApiResponse::ok($this->serializeOrderDetail($order));
     }
 
-    public function ship(string $orderNo): JsonResponse
+    public function ship(Request $request, string $orderNo): JsonResponse
     {
         $order = $this->findOrder($orderNo);
 
@@ -154,10 +175,21 @@ class OrderController extends Controller
             return ApiResponse::error(40901, 'Order status does not allow shipping', 409);
         }
 
+        $fromStatus = $order->status->value;
+
         $order->update([
             'status' => OrderStatus::Shipped,
             'shipped_at' => now(),
         ]);
+
+        $this->auditLogger->log($this->buildContext(
+            $request,
+            $order,
+            OperationAction::Shipped,
+            $fromStatus,
+            OrderStatus::Shipped->value,
+            ['tracking_no' => $request->input('tracking_no')],
+        ));
 
         SyncLogisticsJob::dispatch($order->id);
 
@@ -172,7 +204,17 @@ class OrderController extends Controller
 
         $order = $this->findOrder($orderNo);
 
-        if (! $cancellation->cancel($order->id, $data['reason'] ?? null)) {
+        $apiKey = $request->attributes->get('api_key');
+        \assert($apiKey instanceof ApiKey);
+
+        $actor = new OperationActor(
+            kind: 'api_key',
+            id: $apiKey->id,
+            label: 'ApiKey:'.$apiKey->id,
+            idempotencyKey: $request->header('Idempotency-Key'),
+        );
+
+        if (! $cancellation->cancel($order->id, $data['reason'] ?? null, actor: $actor)) {
             return ApiResponse::error(40901, 'Order status does not allow cancellation', 409);
         }
 
@@ -192,7 +234,18 @@ class OrderController extends Controller
             return ApiResponse::error(40901, 'Order status does not allow refund request', 409);
         }
 
+        $fromStatus = $order->status->value;
+
         $order->update(['status' => OrderStatus::RefundRequested]);
+
+        $this->auditLogger->log($this->buildContext(
+            $request,
+            $order,
+            OperationAction::RefundRequested,
+            $fromStatus,
+            OrderStatus::RefundRequested->value,
+            ['reason' => $request->string('reason')->toString(), 'amount' => $request->input('amount')],
+        ));
 
         return ApiResponse::ok($this->serializeOrderDetail($order->refresh()->load('items')));
     }
@@ -242,5 +295,39 @@ class OrderController extends Controller
             'paid_at' => $order->paid_at?->toJSON(),
             'shipped_at' => $order->shipped_at?->toJSON(),
         ];
+    }
+
+    /**
+     * 构造订单操作审计上下文（API 路径，actor 固定为 api_key）。
+     *
+     * @param array<string, mixed>|null $payload
+     */
+    private function buildContext(
+        Request $request,
+        Order $order,
+        OperationAction $action,
+        ?string $fromStatus,
+        string $toStatus,
+        ?array $payload = null,
+    ): OperationLogContext {
+        $apiKey = $request->attributes->get('api_key');
+        \assert($apiKey instanceof ApiKey);
+
+        return new OperationLogContext(
+            tenantId: (int) $order->tenant_id,
+            actorKind: 'api_key',
+            actorId: $apiKey->id,
+            actorLabel: 'ApiKey:'.$apiKey->id,
+            subjectType: 'order',
+            subjectId: $order->id,
+            subjectLabel: $order->order_no,
+            action: $action,
+            fromStatus: $fromStatus,
+            toStatus: $toStatus,
+            payload: $payload,
+            idempotencyKey: $request->header('Idempotency-Key'),
+            ipAddress: $request->ip(),
+            userAgent: $request->userAgent(),
+        );
     }
 }

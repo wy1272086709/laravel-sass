@@ -29,6 +29,7 @@ class SqlTenantGuard
         'api_usage_daily', 'tenant_bills', 'reconciliation_discrepancies',
         'risk_alerts', 'queue_job_logs', 'impersonation_logs',
         'api_signature_nonces', 'api_idempotency_keys',
+        'operation_logs',
     ];
 
     private static bool $listening = false;

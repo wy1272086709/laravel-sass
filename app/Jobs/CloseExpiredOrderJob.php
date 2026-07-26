@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Domain\Order\OrderCancellationService;
 use App\Models\Order\Order;
+use App\Support\OperationActor;
 use App\Support\QueueJobLogger;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -25,7 +26,13 @@ class CloseExpiredOrderJob implements ShouldQueue
         $log = $logger->start(self::class, $order->tenant_id, ['order_id' => $order->id]);
 
         try {
-            $closed = $cancellation->cancel($order->id, 'timeout_unpaid', onlyIfExpired: true);
+            $actor = new OperationActor(
+                kind: 'system',
+                id: null,
+                label: '系统超时关单',
+            );
+
+            $closed = $cancellation->cancel($order->id, 'timeout_unpaid', onlyIfExpired: true, actor: $actor);
 
             $logger->success($log, [
                 'order_id' => $order->id,
