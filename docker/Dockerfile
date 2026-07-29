@@ -54,8 +54,9 @@ RUN mkdir -p /opt/vendor \
     && cp -a /var/www/html/vendor/. /opt/vendor/
 
 COPY docker/entrypoint.sh /usr/local/bin/laravel-entrypoint
+COPY docker/start-app.sh /usr/local/bin/laravel-start-app
 
-RUN chmod +x /usr/local/bin/laravel-entrypoint
+RUN chmod +x /usr/local/bin/laravel-entrypoint /usr/local/bin/laravel-start-app
 
 ENTRYPOINT ["laravel-entrypoint"]
 

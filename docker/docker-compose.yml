@@ -25,6 +25,7 @@ services:
       DB_DATABASE: saas_platform
       DB_USERNAME: saas
       DB_PASSWORD: saas_secret
+      DB_SEED_ON_STARTUP: ${DB_SEED_ON_STARTUP:-true}
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
       SESSION_DRIVER: redis
@@ -45,11 +46,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
-    command: >
-      sh -c "if ! grep -q '^APP_KEY=.' .env; then php artisan key:generate --force --no-interaction; fi &&
-             php artisan package:discover --ansi &&
-             php artisan migrate --force &&
-             exec php artisan octane:start --server=swoole --host=0.0.0.0 --port=8000"
+    command: ["/usr/local/bin/laravel-start-app"]
 
   queue-worker:
     build: *app-build

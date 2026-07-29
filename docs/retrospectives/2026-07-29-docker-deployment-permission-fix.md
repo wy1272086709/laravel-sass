@@ -160,3 +160,76 @@ Failed opening required '/var/www/html/vendor/autoload.php'
 - Compose 的 `app`、`queue-worker`、`scheduler` 均显式声明 `/usr/local/bin/laravel-entrypoint`。
 
 因此，即使服务器复用一个已存在的空 `vendor-data`，容器也会自行修复，而不需要删除数据库等其他数据卷。
+
+## 后续补充：migration 完成但 seed 未执行
+
+### 问题现象
+
+容器、MySQL 和登录页面都能正常打开，但使用文档中的演示管理员仍提示“登录信息有误”：
+
+```text
+admin@saas.test / password
+```
+
+数据库检查结果是 migration 已执行、业务表已经创建，但 `platform_users`、`tenants` 等表为空。
+
+### 根因
+
+原应用启动命令只包含：
+
+```bash
+php artisan migrate --force
+```
+
+Migration 只负责创建或升级表结构，不会自动执行 `DatabaseSeeder`。因此 `PlatformAdminSeeder` 没有创建平台管理员，登录认证必然失败。
+
+也不能简单地在每次容器启动时无条件执行完整 `db:seed`。现有 Seeder 使用 `updateOrCreate`，重复执行可能覆盖管理员密码或演示数据；容器重启不应改变已经投入使用的账号。
+
+### 解决方案
+
+新增以下文件：
+
+- `docker/start-app.sh`：集中管理应用启动顺序。
+- `database/seeders/DeploymentSeeder.php`：执行一次性部署数据初始化。
+- `deployment_seed_runs` migration：持久化 Seeder 版本完成标记。
+
+最终启动顺序调整为：
+
+```text
+生成 APP_KEY（仅缺失时）
+  -> package:discover
+  -> migrate --force
+  -> DeploymentSeeder
+  -> 启动 Octane
+```
+
+`DeploymentSeeder` 使用 `default-demo-data-v1` 作为版本标记：
+
+1. 标记不存在时，在数据库事务中调用完整 `DatabaseSeeder`。
+2. 所有 Seeder 成功后才写入 `deployment_seed_runs`。
+3. 中途失败时事务回滚且不写标记，下次启动可以安全重试。
+4. 标记存在时直接跳过，避免容器重启反复覆盖账号和数据。
+
+Compose 默认启用首次初始化：
+
+```yaml
+DB_SEED_ON_STARTUP: ${DB_SEED_ON_STARTUP:-true}
+```
+
+不需要演示数据的正式环境可以在启动前设置：
+
+```bash
+export DB_SEED_ON_STARTUP=false
+```
+
+此开关只控制 Seeder，migration 仍会照常执行。
+
+### 验证标准
+
+全新数据库启动后应满足：
+
+- `deployment_seed_runs` 存在 `default-demo-data-v1` 记录。
+- `platform_users` 中存在 `admin@saas.test`。
+- `admin@saas.test / password` 可以登录平台后台。
+- 再次重启容器时日志显示部署 Seed 已完成并跳过。
+- 修改管理员资料后重启容器，资料不会被 Seeder 覆盖。
