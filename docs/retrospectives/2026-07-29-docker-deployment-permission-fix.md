@@ -138,3 +138,25 @@ docker compose -f docker/docker-compose.yml logs --tail=200 app queue-worker sch
 4. Laravel 的 `bootstrap/cache` 属于环境相关生成物，跨环境部署应重新生成。
 5. 外部依赖下载应有限重试，不能无限重试掩盖真实故障。
 6. 线上操作命名卷前必须确认是否包含数据库持久化数据。
+
+## 后续补充：空 vendor 卷兼容
+
+首次修复部署到线上后，又出现以下错误：
+
+```text
+grep: .env: No such file or directory
+Failed opening required '/var/www/html/vendor/autoload.php'
+```
+
+进一步确认存在两个边界场景：
+
+1. 上一次失败部署已经创建了空的 `vendor-data`。Docker 只在命名卷首次创建时执行镜像目录的 copy-up，已经存在的空卷不会在重建镜像后自动补入依赖。
+2. 部分服务器部署平台可能重写容器启动参数，不能只依赖 Dockerfile 中隐式继承的 ENTRYPOINT。
+
+最终增加两层保障：
+
+- 镜像构建完成后，将生产依赖额外保存到不受源码挂载影响的 `/opt/vendor`。
+- 入口脚本发现 `/var/www/html/vendor/autoload.php` 不存在时，主动从 `/opt/vendor` 恢复依赖。
+- Compose 的 `app`、`queue-worker`、`scheduler` 均显式声明 `/usr/local/bin/laravel-entrypoint`。
+
+因此，即使服务器复用一个已存在的空 `vendor-data`，容器也会自行修复，而不需要删除数据库等其他数据卷。

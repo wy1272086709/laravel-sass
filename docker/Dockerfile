@@ -50,6 +50,9 @@ RUN attempts=0; \
 
 USER root
 
+RUN mkdir -p /opt/vendor \
+    && cp -a /var/www/html/vendor/. /opt/vendor/
+
 COPY docker/entrypoint.sh /usr/local/bin/laravel-entrypoint
 
 RUN chmod +x /usr/local/bin/laravel-entrypoint

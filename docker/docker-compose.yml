@@ -7,6 +7,7 @@ services:
       dockerfile: docker/Dockerfile
     image: laravelproj-app:local
     container_name: laravelproj-app
+    entrypoint: ["/usr/local/bin/laravel-entrypoint"]
     working_dir: /var/www/html
     ports:
       - "8080:8000"
@@ -54,6 +55,7 @@ services:
     build: *app-build
     image: laravelproj-app:local
     container_name: laravelproj-queue-worker
+    entrypoint: ["/usr/local/bin/laravel-entrypoint"]
     working_dir: /var/www/html
     volumes: *app-volumes
     environment: *app-environment
@@ -67,6 +69,7 @@ services:
     build: *app-build
     image: laravelproj-app:local
     container_name: laravelproj-scheduler
+    entrypoint: ["/usr/local/bin/laravel-entrypoint"]
     working_dir: /var/www/html
     volumes: *app-volumes
     environment: *app-environment

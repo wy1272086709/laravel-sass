@@ -14,6 +14,15 @@ if [ "$(id -u)" = '0' ]; then
         /var/www/html/storage/logs \
         /var/www/html/bootstrap/cache
 
+    if [ ! -f /var/www/html/vendor/autoload.php ]; then
+        if [ ! -f /opt/vendor/autoload.php ]; then
+            echo 'Production dependencies are missing from both /var/www/html/vendor and /opt/vendor.' >&2
+            exit 1
+        fi
+
+        cp -a /opt/vendor/. /var/www/html/vendor/
+    fi
+
     if [ ! -f /var/www/html/.env ] && [ -f /var/www/html/.env.example ]; then
         cp /var/www/html/.env.example /var/www/html/.env
         env_created=1
