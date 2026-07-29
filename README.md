@@ -115,4 +115,5 @@ php artisan octane:start --server=swoole --host=127.0.0.1 --port=8000
 | 对外 OpenAPI | [docs/api/openapi.yaml](docs/api/openapi.yaml) |
 | 内部面板 OpenAPI | [docs/api/internal.yaml](docs/api/internal.yaml) |
 | 本地压测 | [docs/testing/local-benchmark.md](docs/testing/local-benchmark.md) |
+| Docker 部署权限故障复盘 | [docs/retrospectives/2026-07-29-docker-deployment-permission-fix.md](docs/retrospectives/2026-07-29-docker-deployment-permission-fix.md) |
 | OpenSpec 规范源 | [openspec/](openspec/) |
