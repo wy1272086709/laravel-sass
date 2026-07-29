@@ -233,3 +233,50 @@ export DB_SEED_ON_STARTUP=false
 - `admin@saas.test / password` 可以登录平台后台。
 - 再次重启容器时日志显示部署 Seed 已完成并跳过。
 - 修改管理员资料后重启容器，资料不会被 Seeder 覆盖。
+
+## 后续补充：Vite manifest 缺失
+
+### 问题现象
+
+平台登录后打开 Vue 数据面板出现 HTTP 500：
+
+```text
+Illuminate\Foundation\ViteManifestNotFoundException
+Vite manifest not found at: /var/www/html/public/build/manifest.json
+```
+
+### 根因
+
+部署包按照 `.gitignore` 排除了 `public/build` 和 `node_modules`，这是正确的源码归档策略，但原 Dockerfile 只安装 PHP 依赖，没有执行 `pnpm build`。因此 Blade 模板执行 `@vite(...)` 时找不到构建清单。
+
+不能依赖开发机器提前生成并上传 `public/build`，否则构建结果容易和当前源码、Node 版本或锁文件不一致。
+
+### 解决方案
+
+Dockerfile 增加 Node 多阶段构建：
+
+```text
+node:22-alpine
+  -> pnpm install --frozen-lockfile
+  -> pnpm build
+  -> 生成 /app/public/build
+  -> 复制到 PHP 镜像 /opt/public-build
+```
+
+`/opt/public-build` 不受 `/var/www/html` 源码 bind mount 影响。入口脚本每次启动都会将当前镜像中的构建产物同步到 `/var/www/html/public/build`，并在镜像缺少 `manifest.json` 时立即报出明确错误。
+
+这样部署包仍然可以排除 `.gitignore` 内容，同时保证镜像构建结果包含与源码和 `pnpm-lock.yaml` 匹配的前端资源。
+
+### 同步修复 .env 权限
+
+入口脚本原本只为自己新建的 `.env` 调整权限。如果服务器上已存在由其他 UID 创建且权限为 `600` 的 `.env`，降权后的 Laravel 进程仍无法读取。
+
+现在入口脚本保留 `.env` 的宿主机所有者，将所属组设置为容器内的 `laravel`，并使用 `640` 权限：
+
+```text
+文件所有者：可读写
+laravel 组：只读
+其他用户：无权限
+```
+
+因此不再需要手工执行 `chown 1000:1000 .env`，同时避免把服务器上的 `.env` 所有者强制改成容器 UID。

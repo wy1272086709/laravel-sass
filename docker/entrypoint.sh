@@ -3,8 +3,6 @@
 set -eu
 
 if [ "$(id -u)" = '0' ]; then
-    env_created=0
-
     mkdir -p \
         /home/laravel/.composer/cache \
         /var/www/html/vendor \
@@ -12,7 +10,8 @@ if [ "$(id -u)" = '0' ]; then
         /var/www/html/storage/framework/sessions \
         /var/www/html/storage/framework/views \
         /var/www/html/storage/logs \
-        /var/www/html/bootstrap/cache
+        /var/www/html/bootstrap/cache \
+        /var/www/html/public/build
 
     if [ ! -f /var/www/html/vendor/autoload.php ]; then
         if [ ! -f /opt/vendor/autoload.php ]; then
@@ -23,9 +22,15 @@ if [ "$(id -u)" = '0' ]; then
         cp -a /opt/vendor/. /var/www/html/vendor/
     fi
 
+    if [ ! -f /opt/public-build/manifest.json ]; then
+        echo 'Frontend build is missing from /opt/public-build.' >&2
+        exit 1
+    fi
+
+    cp -a /opt/public-build/. /var/www/html/public/build/
+
     if [ ! -f /var/www/html/.env ] && [ -f /var/www/html/.env.example ]; then
         cp /var/www/html/.env.example /var/www/html/.env
-        env_created=1
     fi
 
     # Bind mounts may contain package caches generated with development-only dependencies.
@@ -41,9 +46,9 @@ if [ "$(id -u)" = '0' ]; then
         /var/www/html/storage \
         /var/www/html/bootstrap/cache
 
-    if [ "$env_created" = '1' ]; then
-        chown laravel:laravel /var/www/html/.env
-        chmod 600 /var/www/html/.env
+    if [ -f /var/www/html/.env ]; then
+        chgrp laravel /var/www/html/.env
+        chmod 640 /var/www/html/.env
     fi
 
     exec setpriv \

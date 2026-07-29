@@ -1,3 +1,17 @@
+FROM node:22-alpine AS frontend-build
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml ./
+
+RUN corepack enable \
+    && pnpm install --frozen-lockfile
+
+COPY postcss.config.js tailwind.config.js vite.config.js ./
+COPY resources ./resources
+
+RUN pnpm build
+
 FROM php:8.4-cli-bookworm
 
 WORKDIR /var/www/html
@@ -52,6 +66,8 @@ USER root
 
 RUN mkdir -p /opt/vendor \
     && cp -a /var/www/html/vendor/. /opt/vendor/
+
+COPY --from=frontend-build /app/public/build /opt/public-build
 
 COPY docker/entrypoint.sh /usr/local/bin/laravel-entrypoint
 COPY docker/start-app.sh /usr/local/bin/laravel-start-app
