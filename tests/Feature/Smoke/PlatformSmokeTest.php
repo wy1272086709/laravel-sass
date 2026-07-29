@@ -20,4 +20,5 @@ it('opens the critical platform back-office pages', function (string $path) {
     'api monitoring panel' => ['/platform/api-monitoring'],
     'queue ops panel' => ['/platform/queue-ops'],
     'risk reconciliation panel' => ['/platform/risk-reconciliation'],
+    'operation logs' => ['/platform/operation-logs'],
 ]);

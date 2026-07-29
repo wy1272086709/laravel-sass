@@ -29,8 +29,31 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 RUN useradd -ms /bin/bash laravel
 
+# 1. 提前创建composer缓存目录并赋予laravel权限
+RUN mkdir -p /home/laravel/.composer/cache \
+    && mkdir -p /var/www/html/vendor \
+    && chown -R laravel:laravel /home/laravel \
+    && chown -R laravel:laravel /var/www/html
+
 EXPOSE 8000
 
 USER laravel
+
+COPY composer.json composer.lock ./
+
+RUN attempts=0; \
+    until composer install --no-dev --no-scripts --no-progress --optimize-autoloader; do \
+        attempts=$((attempts + 1)); \
+        if [ "$attempts" -ge 3 ]; then exit 1; fi; \
+        sleep 3; \
+    done
+
+USER root
+
+COPY docker/entrypoint.sh /usr/local/bin/laravel-entrypoint
+
+RUN chmod +x /usr/local/bin/laravel-entrypoint
+
+ENTRYPOINT ["laravel-entrypoint"]
 
 CMD ["php", "artisan", "octane:start", "--server=swoole", "--host=0.0.0.0", "--port=8000"]

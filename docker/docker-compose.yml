@@ -12,6 +12,7 @@ services:
       - "8080:8000"
     volumes: &app-volumes
       - ..:/var/www/html
+      - vendor-data:/var/www/html/vendor
       - composer-cache:/home/laravel/.composer/cache
     environment: &app-environment
       APP_ENV: local
@@ -44,8 +45,8 @@ services:
       retries: 10
       start_period: 30s
     command: >
-      sh -c "composer install &&
-             if [ ! -f .env ]; then cp .env.example .env && php artisan key:generate --force --no-interaction; fi &&
+      sh -c "if ! grep -q '^APP_KEY=.' .env; then php artisan key:generate --force --no-interaction; fi &&
+             php artisan package:discover --ansi &&
              php artisan migrate --force &&
              exec php artisan octane:start --server=swoole --host=0.0.0.0 --port=8000"
 
@@ -111,3 +112,4 @@ volumes:
   mysql-data:
   redis-data:
   composer-cache:
+  vendor-data:

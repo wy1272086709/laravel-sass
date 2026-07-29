@@ -71,7 +71,7 @@ class OperationLogResource extends Resource
                     ->label('操作者'),
                 Tables\Columns\TextColumn::make('actor_kind')
                     ->label('来源')
-                    ->toggle(isToggledHiddenByDefault: true),
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('action')
                     ->label('动作')
                     ->badge()
@@ -94,7 +94,7 @@ class OperationLogResource extends Resource
                     ->formatStateUsing(fn (?string $state): string => ($state ? OrderStatus::tryFrom($state) : null)?->label() ?? '-'),
                 Tables\Columns\TextColumn::make('ip_address')
                     ->label('IP')
-                    ->toggle(isToggledHiddenByDefault: true),
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([
