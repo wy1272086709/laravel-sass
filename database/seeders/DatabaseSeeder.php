@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
             PlatformAdminSeeder::class,
             TenantSeeder::class,
             OpsDemoSeeder::class,
+            ApiSecurityDemoSeeder::class,
         ]);
     }
 }
