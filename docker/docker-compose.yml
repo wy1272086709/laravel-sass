@@ -7,6 +7,7 @@ services:
       dockerfile: docker/Dockerfile
     image: laravelproj-app:local
     container_name: laravelproj-app
+    restart: unless-stopped
     entrypoint: ["/usr/local/bin/laravel-entrypoint"]
     working_dir: /var/www/html
     ports:
@@ -41,7 +42,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/up"]
+      test: ["CMD", "php", "/var/www/html/docker/healthcheck.php"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -79,6 +80,7 @@ services:
   mysql:
     image: mysql:8.0
     container_name: laravelproj-mysql
+    restart: unless-stopped
     ports:
       - "3307:3306"
     environment:
@@ -97,6 +99,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: laravelproj-redis
+    restart: unless-stopped
     ports:
       - "6380:6379"
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "redis_secret"]
