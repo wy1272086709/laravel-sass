@@ -1,0 +1,3 @@
+schema: spec-driven
+created: 2026-08-03
+goal: 将现有 Mock 订阅支付闭环升级为可上线的微信 H5 支付闭环
