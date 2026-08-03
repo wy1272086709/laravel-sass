@@ -8,8 +8,10 @@ use App\Domain\Enums\TenantStatus;
 use App\Models\Api\ApiKey;
 use App\Models\Api\ApiRequestLog;
 use App\Models\Api\ApiUsageDaily;
+use App\Models\Billing\PaymentOrder;
 use App\Models\Billing\ReconciliationDiscrepancy;
 use App\Models\Billing\TenantBill;
+use App\Models\Billing\TenantSubscription;
 use App\Models\Merchant\MerchantUser;
 use App\Models\Order\Order;
 use App\Models\Platform\Package;
@@ -23,6 +25,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -81,6 +84,16 @@ class Tenant extends Model
     public function bills(): HasMany
     {
         return $this->hasMany(TenantBill::class);
+    }
+
+    public function subscription(): HasOne
+    {
+        return $this->hasOne(TenantSubscription::class);
+    }
+
+    public function paymentOrders(): HasMany
+    {
+        return $this->hasMany(PaymentOrder::class);
     }
 
     /** @return HasMany<RiskAlert> */

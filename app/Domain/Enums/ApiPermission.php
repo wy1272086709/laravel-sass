@@ -15,6 +15,7 @@ enum ApiPermission: string
     case OrderManage = 'order_manage';
     case DashboardRead = 'dashboard_read';
     case BillQuery = 'bill_query';
+    case SubscriptionManage = 'subscription_manage';
 
     public function label(): string
     {
@@ -23,6 +24,7 @@ enum ApiPermission: string
             self::OrderManage => '订单管理',
             self::DashboardRead => '看板读取',
             self::BillQuery => '账单查询',
+            self::SubscriptionManage => '订阅管理',
         };
     }
 }

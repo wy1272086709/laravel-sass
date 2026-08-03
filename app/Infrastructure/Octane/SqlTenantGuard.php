@@ -30,6 +30,7 @@ class SqlTenantGuard
         'risk_alerts', 'queue_job_logs', 'impersonation_logs',
         'api_signature_nonces', 'api_idempotency_keys',
         'operation_logs',
+        'tenant_subscriptions', 'payment_orders',
     ];
 
     private static bool $listening = false;

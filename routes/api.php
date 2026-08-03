@@ -5,7 +5,9 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BillController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\OrderController;
+use App\Http\Controllers\Api\V1\PaymentWebhookController;
 use App\Http\Controllers\Api\V1\ProductController;
+use App\Http\Controllers\Api\V1\SubscriptionController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')
@@ -13,6 +15,7 @@ Route::prefix('v1')
     ->group(function () {
         Route::post('/auth/token', [AuthController::class, 'token']);
         Route::post('/auth/token/refresh', [AuthController::class, 'refresh']);
+        Route::post('/payments/webhooks/{provider}', PaymentWebhookController::class);
         Route::delete('/auth/token', [AuthController::class, 'revoke'])
             ->middleware('api.auth');
 
@@ -56,6 +59,13 @@ Route::prefix('v1')
         Route::middleware(['api.auth:bill_query', 'api.rate'])->group(function () {
             Route::get('/bills', [BillController::class, 'index']);
             Route::get('/bills/{period}', [BillController::class, 'show']);
+        });
+
+        Route::middleware(['api.auth:subscription_manage'])->group(function () {
+            Route::get('/subscription', [SubscriptionController::class, 'show'])
+                ->middleware('api.rate');
+            Route::post('/subscription/checkout', [SubscriptionController::class, 'checkout'])
+                ->middleware(['api.signature', 'api.idempotent', 'api.rate']);
         });
 
         Route::middleware(['api.auth:dashboard_read', 'api.rate'])->group(function () {

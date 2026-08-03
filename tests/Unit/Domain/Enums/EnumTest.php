@@ -29,7 +29,7 @@ it('has the correct backed values per SDD §3.1', function () {
     expect($values(CouponStatus::cases()))->toBe(['not_started', 'active', 'ended']);
     expect($values(ApiKeyStatus::cases()))->toBe(['enabled', 'disabled']);
     expect($values(ApiPermission::cases()))->toBe([
-        'product_query', 'order_manage', 'dashboard_read', 'bill_query',
+        'product_query', 'order_manage', 'dashboard_read', 'bill_query', 'subscription_manage',
     ]);
     expect($values(BillStatus::cases()))->toBe(['pending_settlement', 'settled', 'overdue']);
     expect($values(RiskLevel::cases()))->toBe(['high', 'medium', 'low']);

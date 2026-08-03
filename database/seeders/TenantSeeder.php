@@ -154,6 +154,7 @@ class TenantSeeder extends Seeder
                         ApiPermission::OrderManage->value,
                         ApiPermission::DashboardRead->value,
                         ApiPermission::BillQuery->value,
+                        ApiPermission::SubscriptionManage->value,
                     ],
                     'status' => 'enabled',
                 ],
