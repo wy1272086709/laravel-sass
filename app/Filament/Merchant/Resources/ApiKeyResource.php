@@ -70,6 +70,19 @@ class ApiKeyResource extends Resource
                         ->disabled()
                         ->dehydrated(false),
                 ]),
+            Forms\Components\Section::make('IP 访问控制')
+                ->description('留空 = 不限制。黑名单命中直接拒绝，优先级高于白名单。')
+                ->columns(2)
+                ->schema([
+                    Forms\Components\TagsInput::make('ip_whitelist')
+                        ->label('IP 白名单')
+                        ->placeholder('如 203.0.113.5')
+                        ->helperText('配置后仅允许名单内 IP 调用；支持精确 IP、CIDR（203.0.113.0/24）、通配（203.0.113.*）。'),
+                    Forms\Components\TagsInput::make('ip_blacklist')
+                        ->label('IP 黑名单')
+                        ->placeholder('如 198.51.100.9')
+                        ->helperText('命中名单的 IP 一律拒绝（403 / 业务码 40302），格式同白名单。'),
+                ]),
         ]);
     }
 

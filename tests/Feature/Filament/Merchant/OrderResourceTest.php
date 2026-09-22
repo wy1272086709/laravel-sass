@@ -43,7 +43,7 @@ it('creates orders with the current tenant context', function () {
     $merchant = MerchantUser::factory()->forTenant($tenant)->create();
 
     actingAs($merchant, 'merchant');
-    app()->instance(TenantContext::class, new TenantContext($tenant->id, null, PackageTier::Basic));
+    app()->instance(TenantContext::class, new TenantContext(null, null, PackageTier::Basic));
 
     Livewire::test(CreateOrder::class)
         ->fillForm([

@@ -3,7 +3,9 @@
 use App\Http\Middleware\ApiAuthMiddleware;
 use App\Http\Middleware\ApiExceptionResponseMiddleware;
 use App\Http\Middleware\ApiIdempotencyMiddleware;
+use App\Http\Middleware\ApiIpFilterMiddleware;
 use App\Http\Middleware\ApiRateLimitMiddleware;
+use App\Http\Middleware\ApiRequestLogMiddleware;
 use App\Http\Middleware\ApiSignatureMiddleware;
 use App\Http\Middleware\ApplyTenantGlobalScope;
 use App\Http\Middleware\ResolveTenantContext;
@@ -32,6 +34,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'api.auth' => ApiAuthMiddleware::class,
             'api.exception' => ApiExceptionResponseMiddleware::class,
             'api.idempotent' => ApiIdempotencyMiddleware::class,
+            'api.ip' => ApiIpFilterMiddleware::class,
+            'api.log' => ApiRequestLogMiddleware::class,
             'api.rate' => ApiRateLimitMiddleware::class,
             'api.signature' => ApiSignatureMiddleware::class,
             'sql.tenant.guard' => SqlTenantGuard::class,

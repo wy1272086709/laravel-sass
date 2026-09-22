@@ -36,6 +36,8 @@ class ApiKey extends Model
             'permissions' => AsEnumArrayObject::class.':'.ApiPermission::class,
             'status' => ApiKeyStatus::class,
             'signing_secret' => 'encrypted',
+            'ip_whitelist' => 'array',   // string[]：非空时仅允许列表内 IP
+            'ip_blacklist' => 'array',   // string[]：命中即拒，优先于白名单
             'last_used_at' => 'datetime',
         ];
     }

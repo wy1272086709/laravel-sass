@@ -11,13 +11,13 @@ use App\Http\Controllers\Api\V1\SubscriptionController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')
-    ->middleware(['api.exception'])
+    ->middleware(['api.log', 'api.exception'])
     ->group(function () {
         Route::post('/auth/token', [AuthController::class, 'token']);
         Route::post('/auth/token/refresh', [AuthController::class, 'refresh']);
         Route::post('/payments/webhooks/{provider}', PaymentWebhookController::class);
         Route::delete('/auth/token', [AuthController::class, 'revoke'])
-            ->middleware('api.auth');
+            ->middleware(['api.auth', 'api.ip']);
 
         Route::get('/ping', fn (TenantContext $context) => response()->json([
             'code' => 0,
@@ -27,14 +27,14 @@ Route::prefix('v1')
                 'tenant_id' => $context->tenantId,
                 'tier' => $context->tier->value,
             ],
-        ]))->middleware('api.auth');
+        ]))->middleware(['api.auth', 'api.ip']);
 
-        Route::middleware(['api.auth:product_query', 'api.rate'])->group(function () {
+        Route::middleware(['api.auth:product_query', 'api.ip', 'api.rate'])->group(function () {
             Route::get('/products', [ProductController::class, 'index']);
             Route::get('/products/{product}', [ProductController::class, 'show']);
         });
 
-        Route::middleware(['api.auth:order_manage'])->group(function () {
+        Route::middleware(['api.auth:order_manage', 'api.ip'])->group(function () {
             Route::post('/products', [ProductController::class, 'store'])
                 ->middleware(['api.signature', 'api.idempotent', 'api.rate']);
             Route::put('/products/{product}', [ProductController::class, 'update'])
@@ -56,19 +56,19 @@ Route::prefix('v1')
                 ->middleware(['api.signature', 'api.idempotent', 'api.rate']);
         });
 
-        Route::middleware(['api.auth:bill_query', 'api.rate'])->group(function () {
+        Route::middleware(['api.auth:bill_query', 'api.ip', 'api.rate'])->group(function () {
             Route::get('/bills', [BillController::class, 'index']);
             Route::get('/bills/{period}', [BillController::class, 'show']);
         });
 
-        Route::middleware(['api.auth:subscription_manage'])->group(function () {
+        Route::middleware(['api.auth:subscription_manage', 'api.ip'])->group(function () {
             Route::get('/subscription', [SubscriptionController::class, 'show'])
                 ->middleware('api.rate');
             Route::post('/subscription/checkout', [SubscriptionController::class, 'checkout'])
                 ->middleware(['api.signature', 'api.idempotent', 'api.rate']);
         });
 
-        Route::middleware(['api.auth:dashboard_read', 'api.rate'])->group(function () {
+        Route::middleware(['api.auth:dashboard_read', 'api.ip', 'api.rate'])->group(function () {
             Route::get('/dashboard/overview', [DashboardController::class, 'overview']);
             Route::get('/dashboard/trends', [DashboardController::class, 'trends']);
         });
